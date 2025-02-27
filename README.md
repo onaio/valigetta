@@ -1,6 +1,6 @@
 # Valigetta
 
-A Python Sotfware Development Kit (SDK) for managing keys and decrypting submissions from ODK servers.
+A Python Software Development Kit (SDK) for managing keys and decrypting submissions from ODK servers.
 
 ## Development
 
