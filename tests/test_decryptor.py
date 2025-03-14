@@ -62,7 +62,7 @@ def test_decrypt_submission(kms_client, kms_key, fake_submission_xml, fake_aes_k
         kms_client,
         key_id=kms_key,
         submission_xml=fake_submission_xml,
-        encrypted_files=[(encrypted_data, 0)],
+        encrypted_files=[encrypted_data],
     )
 
     assert decrypted_data[0] == original_data

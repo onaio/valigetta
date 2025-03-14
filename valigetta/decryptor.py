@@ -103,7 +103,7 @@ def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
     submission_xml: TextIO,
-    encrypted_files: list[tuple[bytes, int]],
+    encrypted_files: list[bytes],
 ) -> list[bytes]:
     """Decrypt submission and media files using AWS KMS.
 
@@ -125,7 +125,8 @@ def decrypt_submission(
     instance_id = _get_instance_id(submission_xml)
 
     decrypted_files = []
-    for encrypted_chunk, index in encrypted_files:
+
+    for index, encrypted_chunk in enumerate(encrypted_files):
         iv = _get_submission_iv(instance_id, aes_key, index)
         cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
         decrypted_files.append(cipher_aes.decrypt(encrypted_chunk))
