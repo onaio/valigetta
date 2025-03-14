@@ -1,0 +1,2 @@
+class InvalidSubmission(Exception):
+    pass
