@@ -113,7 +113,7 @@ def decrypt_submission(
     :param submission_xml: Submission XML file
     :param encrypted_file: Encrypted file contents
     :param index: Index used for mutating IV
-    :return: Decrypted submission
+    :return: Decrypted data
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
     encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml)
