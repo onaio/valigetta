@@ -110,8 +110,7 @@ def decrypt_submission(
     :param kms_client: KMSClient instance
     :param key_id: AWS KMS key used for decryption
     :param submission_xml: Submission XML file
-    :param encrypted_content: List of tuples containing encrypted file contents
-                            and their respective indices
+    :param encrypted_files: List encrypted file contents
     :return: List of decrypted files in the same order
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
