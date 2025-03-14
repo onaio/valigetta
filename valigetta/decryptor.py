@@ -103,17 +103,16 @@ def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
     submission_xml: TextIO,
-    encrypted_data: bytes,
-    index: int,
-) -> bytes:
-    """Decrypt submission using AWS KMS
+    encrypted_files: list[tuple[bytes, int]],
+) -> list[bytes]:
+    """Decrypt submission and media files using AWS KMS.
 
-    :param kms_client KMSClient instance
+    :param kms_client: KMSClient instance
     :param key_id: AWS KMS key used for decryption
     :param submission_xml: Submission XML file
-    :param encrypted_file: Encrypted file contents
-    :param index: Index used for mutating IV
-    :return: Decrypted data
+    :param encrypted_content: List of tuples containing encrypted file contents
+                            and their respective indices
+    :return: List of decrypted files in the same order
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
     encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml)
@@ -124,10 +123,12 @@ def decrypt_submission(
 
     logger.debug("Generating IV for AES decryption.")
     instance_id = _get_instance_id(submission_xml)
-    iv = _get_submission_iv(instance_id, aes_key, index)
 
-    logger.debug("Performing AES decryption on submission data.")
-    cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+    decrypted_files = []
+    for encrypted_chunk, index in encrypted_files:
+        iv = _get_submission_iv(instance_id, aes_key, index)
+        cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+        decrypted_files.append(cipher_aes.decrypt(encrypted_chunk))
 
-    logger.debug("Decryption successful")
-    return cipher_aes.decrypt(encrypted_data)
+    logger.debug("Decryption successful for all files.")
+    return decrypted_files
