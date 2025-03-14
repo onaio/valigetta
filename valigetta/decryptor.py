@@ -6,7 +6,7 @@ import base64
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
-from typing import TextIO
+from typing import Iterable, Iterator, TextIO
 
 from Crypto.Cipher import AES
 
@@ -103,15 +103,15 @@ def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
     submission_xml: TextIO,
-    encrypted_files: list[bytes],
-) -> list[bytes]:
+    encrypted_data: Iterable[bytes],
+) -> Iterator[bytes]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
     :param key_id: AWS KMS key used for decryption
     :param submission_xml: Submission XML file
-    :param encrypted_files: List encrypted file contents
-    :return: List of decrypted files in the same order
+    :param encrypted_data: An iterable yielding encrypted file contents
+    :return: A generator yielding decrypted data chunks
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
     encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml)
@@ -123,12 +123,8 @@ def decrypt_submission(
     logger.debug("Generating IV for AES decryption.")
     instance_id = _get_instance_id(submission_xml)
 
-    decrypted_files = []
-
-    for index, encrypted_chunk in enumerate(encrypted_files):
+    for index, encrypted_chunk in enumerate(encrypted_data):
         iv = _get_submission_iv(instance_id, aes_key, index)
         cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-        decrypted_files.append(cipher_aes.decrypt(encrypted_chunk))
 
-    logger.debug("Decryption successful for all files.")
-    return decrypted_files
+        yield cipher_aes.decrypt(encrypted_chunk)

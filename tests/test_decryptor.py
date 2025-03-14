@@ -1,6 +1,6 @@
 import base64
 from io import StringIO
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from Crypto.Cipher import AES
@@ -62,7 +62,42 @@ def test_decrypt_submission(kms_client, kms_key, fake_submission_xml, fake_aes_k
         kms_client,
         key_id=kms_key,
         submission_xml=fake_submission_xml,
-        encrypted_files=[encrypted_data],
+        encrypted_data=[encrypted_data],
     )
 
-    assert decrypted_data[0] == original_data
+    assert list(decrypted_data)[0] == original_data
+
+
+def test_decrypt_submission_multiple_files(
+    kms_client, kms_key, fake_submission_xml, fake_aes_key
+):
+    """KMS decryption is only called once when decrypting multiple files."""
+    plaintext_aes_key, _ = fake_aes_key
+
+    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+
+    instance_id = "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+
+    # Encrypt two sample files using the same AES key but different IVs
+    original_files = [b"<data>file1</data>", b"<data>file2</data>"]
+
+    def encrypted_files_generator():
+        for index, original_data in enumerate(original_files):
+            iv = _get_submission_iv(instance_id, plaintext_aes_key, index=index)
+            cipher_aes = AES.new(
+                plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128
+            )
+            yield cipher_aes.encrypt(original_data)
+
+    decrypted_data = list(
+        decrypt_submission(
+            kms_client,
+            key_id=kms_key,
+            submission_xml=fake_submission_xml,
+            encrypted_data=encrypted_files_generator(),
+        )
+    )
+
+    assert decrypted_data == original_files
+
+    kms_client.decrypt_aes_key.assert_called_once_with(kms_key, ANY)
