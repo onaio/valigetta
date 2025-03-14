@@ -105,7 +105,7 @@ def decrypt_submission(
     submission_xml: TextIO,
     encrypted_data: bytes,
     index: int,
-) -> str | bytes:
+) -> bytes:
     """Decrypt submission using AWS KMS
 
     :param kms_client KMSClient instance
@@ -128,15 +128,6 @@ def decrypt_submission(
 
     logger.debug("Performing AES decryption on submission data.")
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-    decrypted_data = cipher_aes.decrypt(encrypted_data)
 
-    try:
-        decoded_data = decrypted_data.decode("utf-8")
-        if decoded_data.strip().startswith("<"):
-            logger.debug("Decryption successful: returning XML as string.")
-            return decoded_data  # Return as string if it's an XML file
-    except UnicodeDecodeError:
-        pass
-
-    logger.debug("Decryption successful: returning media as bytes.")
-    return decrypted_data  # return as bytes for media files
+    logger.debug("Decryption successful")
+    return cipher_aes.decrypt(encrypted_data)

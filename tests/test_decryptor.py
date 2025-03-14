@@ -66,4 +66,4 @@ def test_decrypt_submission(kms_client, kms_key, fake_submission_xml, fake_aes_k
         index=0,
     )
 
-    assert decrypted_data == original_data.decode("utf-8")
+    assert decrypted_data == original_data
