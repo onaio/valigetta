@@ -16,7 +16,7 @@ class KMSClient(ABC):
         raise NotImplementedError("Subclasses must implement create_key method.")
 
     @abstractmethod
-    def decrypt_aes_key(self, key_id: str, encrypted_aes_key: bytes) -> bytes:
+    def decrypt_aes_key(self, encrypted_aes_key: bytes) -> bytes:
         """Decrypt AES symmetric key."""
         raise NotImplementedError("Subclasses must implement decrypt_aes_key method.")
 
