@@ -1,4 +1,5 @@
 import logging
+from abc import ABC, abstractmethod
 from typing import Optional
 
 import boto3
@@ -6,7 +7,23 @@ import boto3
 logger = logging.getLogger(__name__)
 
 
-class KMSClient:
+class KMSClient(ABC):
+    """Abstract Base Class for KMS Clients."""
+
+    @abstractmethod
+    def create_key(self, description: Optional[str] = None) -> dict:
+        """Create an encryption key."""
+        raise NotImplementedError("Subclasses must implement create_key method.")
+
+    @abstractmethod
+    def decrypt_aes_key(self, key_id: str, encrypted_aes_key: bytes) -> bytes:
+        """Decrypt AES symmetric key."""
+        raise NotImplementedError("Subclasses must implement decrypt_aes_key method.")
+
+
+class AWSKMSClient(KMSClient):
+    """AWS KMS Client Implementation."""
+
     def __init__(
         self, aws_access_key_id=None, aws_secret_access_key=None, region_name=None
     ):
