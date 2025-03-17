@@ -67,8 +67,8 @@ def test_decrypt_submission(
     decrypted_data = decrypt_submission(
         aws_kms_client,
         key_id=aws_kms_key,
-        submission_xml=fake_submission_xml.read(),
-        encrypted_files=[encrypted_data],
+        submission_xml=fake_submission_xml,
+        encrypted_files=[BytesIO(encrypted_data)],
     )
 
     assert list(decrypted_data)[0] == original_data
@@ -85,13 +85,13 @@ def test_decrypt_submission_multiple_files(
 
     def encrypted_files_generator():
         for index, original_data in enumerate(original_files):
-            yield encrypt_submission(original_data, index)
+            yield BytesIO(encrypt_submission(original_data, index))
 
     decrypted_data = list(
         decrypt_submission(
             aws_kms_client,
             key_id=aws_kms_key,
-            submission_xml=fake_submission_xml.read(),
+            submission_xml=fake_submission_xml,
             encrypted_files=encrypted_files_generator(),
         )
     )
@@ -109,7 +109,7 @@ def test_decrypt_invalid_xml(
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_data = b"<data>test submission</data>"
-    encrypted_data = encrypt_submission(original_data, 0)
+    encrypted_file = BytesIO(encrypt_submission(original_data, 0))
 
     invalid_xml = BytesIO(b"invalid xml")
 
@@ -118,8 +118,8 @@ def test_decrypt_invalid_xml(
             decrypt_submission(
                 aws_kms_client,
                 key_id=aws_kms_key,
-                submission_xml=invalid_xml.read(),
-                encrypted_files=[encrypted_data],
+                submission_xml=invalid_xml,
+                encrypted_files=[encrypted_file],
             )
         )
 
@@ -147,8 +147,8 @@ def test_decrypt_invalid_xml(
             decrypt_submission(
                 aws_kms_client,
                 key_id=aws_kms_key,
-                submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
-                encrypted_files=[encrypted_data],
+                submission_xml=BytesIO(xml_content.encode("utf-8")),
+                encrypted_files=[encrypted_file],
             )
         )
 
@@ -176,8 +176,8 @@ def test_decrypt_invalid_xml(
             decrypt_submission(
                 aws_kms_client,
                 key_id=aws_kms_key,
-                submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
-                encrypted_files=[encrypted_data],
+                submission_xml=BytesIO(xml_content.encode("utf-8")),
+                encrypted_files=[encrypted_file],
             )
         )
 

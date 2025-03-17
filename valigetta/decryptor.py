@@ -6,6 +6,7 @@ import base64
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
+from io import BytesIO
 from typing import Iterable, Iterator
 
 from Crypto.Cipher import AES
@@ -98,8 +99,8 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
 def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
-    submission_xml: bytes,
-    encrypted_files: Iterable[bytes],
+    submission_xml: BytesIO,
+    encrypted_files: Iterable[BytesIO],
 ) -> Iterator[bytes]:
     """Decrypt submission and media files using AWS KMS.
 
@@ -110,18 +111,21 @@ def decrypt_submission(
     :return: A generator yielding decrypted data chunks
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
-    encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml)
+    submission_xml.seek(0)  # Reset file pointer
+    encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml.read())
     encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
 
     logger.debug("Decrypting AES key using AWS KMS.")
     aes_key = kms_client.decrypt_aes_key(key_id, encrypted_aes_key)
 
     logger.debug("Generating IV for AES decryption.")
-    instance_id = _get_instance_id(submission_xml)
+    submission_xml.seek(0)  # Reset file pointer
+    instance_id = _get_instance_id(submission_xml.read())
 
     for index, file in enumerate(encrypted_files):
         logger.debug("Decrypting index %d", index)
         iv = _get_submission_iv(instance_id, aes_key, index)
         cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
-        yield cipher_aes.decrypt(file)
+        while chunk := file.read(4096):  # Read chunks of 4KB
+            yield cipher_aes.decrypt(chunk)
