@@ -68,7 +68,7 @@ def test_decrypt_submission(
         kms_client,
         key_id=kms_key,
         submission_xml=fake_submission_xml.read(),
-        encrypted_data=[encrypted_data],
+        encrypted_files=[encrypted_data],
     )
 
     assert list(decrypted_data)[0] == original_data
@@ -92,7 +92,7 @@ def test_decrypt_submission_multiple_files(
             kms_client,
             key_id=kms_key,
             submission_xml=fake_submission_xml.read(),
-            encrypted_data=encrypted_files_generator(),
+            encrypted_files=encrypted_files_generator(),
         )
     )
 
@@ -117,7 +117,7 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
                 kms_client,
                 key_id=kms_key,
                 submission_xml=invalid_xml.read(),
-                encrypted_data=[encrypted_data],
+                encrypted_files=[encrypted_data],
             )
         )
 
@@ -146,7 +146,7 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
                 kms_client,
                 key_id=kms_key,
                 submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
-                encrypted_data=[encrypted_data],
+                encrypted_files=[encrypted_data],
             )
         )
 
@@ -175,7 +175,7 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
                 kms_client,
                 key_id=kms_key,
                 submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
-                encrypted_data=[encrypted_data],
+                encrypted_files=[encrypted_data],
             )
         )
 

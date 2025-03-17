@@ -99,14 +99,14 @@ def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
     submission_xml: bytes,
-    encrypted_data: Iterable[bytes],
+    encrypted_files: Iterable[bytes],
 ) -> Iterator[bytes]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
     :param key_id: AWS KMS key used for decryption
-    :param submission_xml: Submission XML file
-    :param encrypted_data: An iterable yielding encrypted file contents
+    :param submission_xml: Submission XML file contents
+    :param encrypted_files: An iterable yielding encrypted file contents
     :return: A generator yielding decrypted data chunks
     """
     logger.debug("Extracting encrypted AES key from submission XML.")
@@ -119,9 +119,9 @@ def decrypt_submission(
     logger.debug("Generating IV for AES decryption.")
     instance_id = _get_instance_id(submission_xml)
 
-    for index, encrypted_chunk in enumerate(encrypted_data):
+    for index, file in enumerate(encrypted_files):
         logger.debug("Decrypting index %d", index)
         iv = _get_submission_iv(instance_id, aes_key, index)
         cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
-        yield cipher_aes.decrypt(encrypted_chunk)
+        yield cipher_aes.decrypt(file)
