@@ -25,7 +25,11 @@ class AWSKMSClient(KMSClient):
     """AWS KMS Client Implementation."""
 
     def __init__(
-        self, aws_access_key_id=None, aws_secret_access_key=None, region_name=None
+        self,
+        key_id: Optional[str] = None,
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None,
+        region_name: Optional[str] = None,
     ):
         self.kms_client = boto3.client(
             "kms",
@@ -33,6 +37,7 @@ class AWSKMSClient(KMSClient):
             aws_secret_access_key=aws_secret_access_key,
             region_name=region_name,
         )
+        self.key_id = key_id
 
     def create_key(self, description: Optional[str] = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
@@ -48,16 +53,18 @@ class AWSKMSClient(KMSClient):
         )
         return response["KeyMetadata"]
 
-    def decrypt_aes_key(self, key_id: str, encrypted_aes_key: bytes) -> bytes:
+    def decrypt_aes_key(self, encrypted_aes_key: bytes) -> bytes:
         """Decrypt AES symmetric key using AWS KMS.
 
-        :param key_id: AWS KMS key used for decryption.
         :param encrypted_aes_key: Encrypted symmetric key.
         :return: Decrypted AES key in plaintext.
         """
+        if not self.key_id:
+            raise ValueError("A key_id must be provided for decryption.")
+
         response = self.kms_client.decrypt(
             CiphertextBlob=encrypted_aes_key,
-            KeyId=key_id,
+            KeyId=self.key_id,
             EncryptionAlgorithm="RSAES_OAEP_SHA_256",
         )
         return response["Plaintext"]

@@ -11,6 +11,7 @@ def test_aws_decrypt_aes_key(aws_kms_key, aws_kms_client, boto3_kms_client):
     """AWS KMS client decrypt_aes_key decrypts symmetric key."""
     # Generate a new KMS key
     key_id = aws_kms_key
+    aws_kms_client.key_id = key_id
 
     # Encrypt a test AES key with KMS key
     plaintext_key = b"test-aes-key-1234"
@@ -18,6 +19,7 @@ def test_aws_decrypt_aes_key(aws_kms_key, aws_kms_client, boto3_kms_client):
     encrypted_aes_key = encrypted_response["CiphertextBlob"]
 
     # Decrypt AES key with KSM key
-    decrypted_key = aws_kms_client.decrypt_aes_key(key_id, encrypted_aes_key)
+
+    decrypted_key = aws_kms_client.decrypt_aes_key(encrypted_aes_key)
 
     assert decrypted_key == plaintext_key

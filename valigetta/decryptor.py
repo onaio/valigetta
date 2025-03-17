@@ -98,7 +98,6 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
 
 def decrypt_submission(
     kms_client: KMSClient,
-    key_id: str,
     submission_xml: BytesIO,
     encrypted_files: Iterable[BytesIO],
 ) -> Iterator[bytes]:
@@ -116,7 +115,7 @@ def decrypt_submission(
     encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
 
     logger.debug("Decrypting AES key using AWS KMS.")
-    aes_key = kms_client.decrypt_aes_key(key_id, encrypted_aes_key)
+    aes_key = kms_client.decrypt_aes_key(encrypted_aes_key)
 
     logger.debug("Generating IV for AES decryption.")
     submission_xml.seek(0)  # Reset file pointer
