@@ -6,6 +6,7 @@ import pytest
 from Crypto.Cipher import AES
 
 from valigetta.decryptor import _get_submission_iv, decrypt_submission
+from valigetta.exceptions import InvalidSubmission
 
 
 @pytest.fixture
@@ -41,23 +42,27 @@ def fake_aes_key(boto3_kms_client, kms_key):
     return plaintext_key, encrypted_key
 
 
-def test_decrypt_submission(kms_client, kms_key, fake_submission_xml, fake_aes_key):
+@pytest.fixture
+def encrypt_submission(fake_aes_key):
+    def _encrypt(original_data, index):
+        plaintext_aes_key, _ = fake_aes_key
+        iv = _get_submission_iv(
+            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", plaintext_aes_key, index=index
+        )
+        cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+        return cipher_aes.encrypt(original_data)
+
+    return _encrypt
+
+
+def test_decrypt_submission(
+    kms_client, kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
+):
     """Test decryption of an ODK submission."""
     plaintext_aes_key, _ = fake_aes_key
-
-    kms_client.decrypt_aes_key = MagicMock()
-    kms_client.decrypt_aes_key.return_value = plaintext_aes_key
-
-    # Generate IV using fake AES key, instanceID, and index 0
-    iv = _get_submission_iv(
-        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", plaintext_aes_key, index=0
-    )
-
-    # Encrypt sample data using fake AES key
-    cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
     original_data = b"<data>test submission</data>"
-    encrypted_data = cipher_aes.encrypt(original_data)
-
+    encrypted_data = encrypt_submission(original_data, 0)
     decrypted_data = decrypt_submission(
         kms_client,
         key_id=kms_key,
@@ -69,25 +74,18 @@ def test_decrypt_submission(kms_client, kms_key, fake_submission_xml, fake_aes_k
 
 
 def test_decrypt_submission_multiple_files(
-    kms_client, kms_key, fake_submission_xml, fake_aes_key
+    kms_client, kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
 ):
     """KMS decryption is only called once when decrypting multiple files."""
     plaintext_aes_key, _ = fake_aes_key
-
     kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
-
-    instance_id = "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
     # Encrypt two sample files using the same AES key but different IVs
     original_files = [b"<data>file1</data>", b"<data>file2</data>"]
 
     def encrypted_files_generator():
         for index, original_data in enumerate(original_files):
-            iv = _get_submission_iv(instance_id, plaintext_aes_key, index=index)
-            cipher_aes = AES.new(
-                plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128
-            )
-            yield cipher_aes.encrypt(original_data)
+            yield encrypt_submission(original_data, index)
 
     decrypted_data = list(
         decrypt_submission(
@@ -101,3 +99,19 @@ def test_decrypt_submission_multiple_files(
     assert decrypted_data == original_files
 
     kms_client.decrypt_aes_key.assert_called_once_with(kms_key, ANY)
+
+
+def test_decrypt_invalid_xml(kms_client, kms_key, encrypt_submission):
+    """Invalid XML structure is throws exception"""
+    original_data = b"<data>test submission</data>"
+    encrypted_data = encrypt_submission(original_data, 0)
+
+    with pytest.raises(InvalidSubmission):
+        list(
+            decrypt_submission(
+                kms_client,
+                key_id=kms_key,
+                submission_xml=StringIO("invalid xml"),
+                encrypted_data=[encrypted_data],
+            )
+        )

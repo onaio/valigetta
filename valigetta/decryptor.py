@@ -45,7 +45,6 @@ def _extract_encrypted_aes_key(submission_xml: TextIO) -> str:
 
 def _get_instance_id(submission_xml: TextIO) -> str:
     """Extract instanceID from submission XML"""
-
     try:
         submission_xml.seek(0)  # Reset file pointer
         tree = ET.parse(submission_xml)
