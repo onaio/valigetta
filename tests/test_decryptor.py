@@ -35,10 +35,10 @@ def fake_submission_xml():
 
 
 @pytest.fixture
-def fake_aes_key(boto3_kms_client, kms_key):
+def fake_aes_key(boto3_kms_client, aws_kms_key):
     """Encrypt a fake AES key with AWS KMS and return it."""
     plaintext_key = b"0123456789abcdef0123456789abcdef"
-    response = boto3_kms_client.encrypt(KeyId=kms_key, Plaintext=plaintext_key)
+    response = boto3_kms_client.encrypt(KeyId=aws_kms_key, Plaintext=plaintext_key)
     encrypted_key = response["CiphertextBlob"]
     return plaintext_key, encrypted_key
 
@@ -57,16 +57,16 @@ def encrypt_submission(fake_aes_key):
 
 
 def test_decrypt_submission(
-    kms_client, kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
 ):
     """Test decryption of an ODK submission."""
     plaintext_aes_key, _ = fake_aes_key
-    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
     original_data = b"<data>test submission</data>"
     encrypted_data = encrypt_submission(original_data, 0)
     decrypted_data = decrypt_submission(
-        kms_client,
-        key_id=kms_key,
+        aws_kms_client,
+        key_id=aws_kms_key,
         submission_xml=fake_submission_xml.read(),
         encrypted_files=[encrypted_data],
     )
@@ -75,11 +75,11 @@ def test_decrypt_submission(
 
 
 def test_decrypt_submission_multiple_files(
-    kms_client, kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
 ):
     """KMS decryption is only called once when decrypting multiple files."""
     plaintext_aes_key, _ = fake_aes_key
-    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_files = [b"<data>file1</data>", b"<data>file2</data>"]
 
@@ -89,8 +89,8 @@ def test_decrypt_submission_multiple_files(
 
     decrypted_data = list(
         decrypt_submission(
-            kms_client,
-            key_id=kms_key,
+            aws_kms_client,
+            key_id=aws_kms_key,
             submission_xml=fake_submission_xml.read(),
             encrypted_files=encrypted_files_generator(),
         )
@@ -98,13 +98,15 @@ def test_decrypt_submission_multiple_files(
 
     assert decrypted_data == original_files
 
-    kms_client.decrypt_aes_key.assert_called_once_with(kms_key, ANY)
+    aws_kms_client.decrypt_aes_key.assert_called_once_with(aws_kms_key, ANY)
 
 
-def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submission):
+def test_decrypt_invalid_xml(
+    aws_kms_client, aws_kms_key, fake_aes_key, encrypt_submission
+):
     """Invalid XML structure raises an exception"""
     plaintext_aes_key, _ = fake_aes_key
-    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_data = b"<data>test submission</data>"
     encrypted_data = encrypt_submission(original_data, 0)
@@ -114,8 +116,8 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
-                kms_client,
-                key_id=kms_key,
+                aws_kms_client,
+                key_id=aws_kms_key,
                 submission_xml=invalid_xml.read(),
                 encrypted_files=[encrypted_data],
             )
@@ -143,8 +145,8 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
-                kms_client,
-                key_id=kms_key,
+                aws_kms_client,
+                key_id=aws_kms_key,
                 submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
                 encrypted_files=[encrypted_data],
             )
@@ -172,8 +174,8 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
-                kms_client,
-                key_id=kms_key,
+                aws_kms_client,
+                key_id=aws_kms_key,
                 submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
                 encrypted_files=[encrypted_data],
             )

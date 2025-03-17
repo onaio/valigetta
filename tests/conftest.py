@@ -6,7 +6,7 @@ from valigetta.kms import AWSKMSClient
 
 
 @pytest.fixture
-def kms_client():
+def aws_kms_client():
     """Fixture to provide a KMSClient instance with mocked credentials."""
     with mock_aws():
         yield AWSKMSClient(region_name="us-east-1")
@@ -20,8 +20,8 @@ def boto3_kms_client():
 
 
 @pytest.fixture
-def kms_key(kms_client):
+def aws_kms_key(aws_kms_client):
     """Creates a mocked AWS KMS key."""
-    response = kms_client.create_key(description="Test key")
+    response = aws_kms_client.create_key(description="Test key")
 
     return response["KeyId"]
