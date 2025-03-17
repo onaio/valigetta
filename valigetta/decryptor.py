@@ -123,6 +123,7 @@ def decrypt_submission(
     instance_id = _get_instance_id(submission_xml)
 
     for index, encrypted_chunk in enumerate(encrypted_data):
+        logger.debug("Decrypting index %d", index)
         iv = _get_submission_iv(instance_id, aes_key, index)
         cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
