@@ -6,7 +6,7 @@ import base64
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
-from typing import Iterable, Iterator, TextIO
+from typing import Iterable, Iterator
 
 from Crypto.Cipher import AES
 
@@ -16,17 +16,16 @@ from valigetta.kms import KMSClient
 logger = logging.getLogger(__name__)
 
 
-def _extract_encrypted_aes_key(submission_xml: TextIO) -> str:
+def _extract_encrypted_aes_key(submission_xml: bytes) -> str:
     """Extract encrypted AES key from submission.xml
 
     :param submission_xml: Submission XML file
     :return: value from the tag base64EncryptedKey
     """
     try:
-        tree = ET.parse(submission_xml)
-        root = tree.getroot()
+        tree = ET.fromstring(submission_xml)
         namespace = {"n": "http://opendatakit.org/submissions"}
-        encrypted_key_elem = root.find("n:base64EncryptedKey", namespace)
+        encrypted_key_elem = tree.find("n:base64EncryptedKey", namespace)
 
         if encrypted_key_elem is None:
             raise InvalidSubmission(
@@ -43,16 +42,14 @@ def _extract_encrypted_aes_key(submission_xml: TextIO) -> str:
         raise
 
 
-def _get_instance_id(submission_xml: TextIO) -> str:
+def _get_instance_id(submission_xml: bytes) -> str:
     """Extract instanceID from submission XML"""
     try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.parse(submission_xml)
-        root = tree.getroot()
-        instance_id = root.attrib.get("instanceID")
+        tree = ET.fromstring(submission_xml)
+        instance_id = tree.attrib.get("instanceID")
 
         if instance_id is None:
-            meta_elem = root.find(".//{http://openrosa.org/xforms}meta")
+            meta_elem = tree.find(".//{http://openrosa.org/xforms}meta")
 
             if meta_elem is not None:
                 instance_id_elem = meta_elem.find(
@@ -101,7 +98,7 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
 def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
-    submission_xml: TextIO,
+    submission_xml: bytes,
     encrypted_data: Iterable[bytes],
 ) -> Iterator[bytes]:
     """Decrypt submission and media files using AWS KMS.

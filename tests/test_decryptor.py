@@ -1,5 +1,5 @@
 import base64
-from io import StringIO
+from io import BytesIO
 from unittest.mock import ANY, MagicMock
 
 import pytest
@@ -30,7 +30,8 @@ def fake_submission_xml():
         <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
     </data>
     """.strip()
-    return StringIO(xml_content)
+
+    return BytesIO(xml_content.encode("utf-8"))
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ def test_decrypt_submission(
     decrypted_data = decrypt_submission(
         kms_client,
         key_id=kms_key,
-        submission_xml=fake_submission_xml,
+        submission_xml=fake_submission_xml.read(),
         encrypted_data=[encrypted_data],
     )
 
@@ -80,7 +81,6 @@ def test_decrypt_submission_multiple_files(
     plaintext_aes_key, _ = fake_aes_key
     kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
-    # Encrypt two sample files using the same AES key but different IVs
     original_files = [b"<data>file1</data>", b"<data>file2</data>"]
 
     def encrypted_files_generator():
@@ -91,7 +91,7 @@ def test_decrypt_submission_multiple_files(
         decrypt_submission(
             kms_client,
             key_id=kms_key,
-            submission_xml=fake_submission_xml,
+            submission_xml=fake_submission_xml.read(),
             encrypted_data=encrypted_files_generator(),
         )
     )
@@ -102,16 +102,18 @@ def test_decrypt_submission_multiple_files(
 
 
 def test_decrypt_invalid_xml(kms_client, kms_key, encrypt_submission):
-    """Invalid XML structure is throws exception"""
+    """Invalid XML structure raises an exception"""
     original_data = b"<data>test submission</data>"
     encrypted_data = encrypt_submission(original_data, 0)
+
+    invalid_xml = BytesIO(b"invalid xml")
 
     with pytest.raises(InvalidSubmission):
         list(
             decrypt_submission(
                 kms_client,
                 key_id=kms_key,
-                submission_xml=StringIO("invalid xml"),
+                submission_xml=invalid_xml.read(),
                 encrypted_data=[encrypted_data],
             )
         )
