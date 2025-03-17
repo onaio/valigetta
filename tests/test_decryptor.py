@@ -152,7 +152,7 @@ def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submissi
 
     assert str(exc_info.value) == "instanceID not found in submission.xml"
 
-    # base64EncryptedKey
+    # base64EncryptedKey missing
     xml_content = f"""<?xml version="1.0"?>
     <data encrypted="yes" id="test_valigetta" version="202502131337"
           instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
