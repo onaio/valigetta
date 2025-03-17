@@ -51,7 +51,7 @@ def encrypt_submission(fake_aes_key):
             "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", plaintext_aes_key, index=index
         )
         cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-        return cipher_aes.encrypt(original_data)
+        return BytesIO(cipher_aes.encrypt(original_data))
 
     return _encrypt
 
@@ -63,12 +63,12 @@ def test_decrypt_submission(
     plaintext_aes_key, _ = fake_aes_key
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
     original_data = b"<data>test submission</data>"
-    encrypted_data = encrypt_submission(original_data, 0)
+    encrypted_file = encrypt_submission(original_data, 0)
     decrypted_data = decrypt_submission(
         aws_kms_client,
         key_id=aws_kms_key,
         submission_xml=fake_submission_xml,
-        encrypted_files=[BytesIO(encrypted_data)],
+        encrypted_files=[encrypted_file],
     )
 
     assert list(decrypted_data)[0] == original_data
@@ -81,11 +81,11 @@ def test_decrypt_submission_multiple_files(
     plaintext_aes_key, _ = fake_aes_key
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
-    original_files = [b"<data>file1</data>", b"<data>file2</data>"]
+    original_data = [b"<data>file1</data>", b"<data>file2</data>"]
 
     def encrypted_files_generator():
-        for index, original_data in enumerate(original_files):
-            yield BytesIO(encrypt_submission(original_data, index))
+        for index, datum in enumerate(original_data):
+            yield encrypt_submission(datum, index)
 
     decrypted_data = list(
         decrypt_submission(
@@ -96,7 +96,7 @@ def test_decrypt_submission_multiple_files(
         )
     )
 
-    assert decrypted_data == original_files
+    assert decrypted_data == original_data
 
     aws_kms_client.decrypt_aes_key.assert_called_once_with(aws_kms_key, ANY)
 
@@ -109,7 +109,7 @@ def test_decrypt_invalid_xml(
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_data = b"<data>test submission</data>"
-    encrypted_file = BytesIO(encrypt_submission(original_data, 0))
+    encrypted_file = encrypt_submission(original_data, 0)
 
     invalid_xml = BytesIO(b"invalid xml")
 
