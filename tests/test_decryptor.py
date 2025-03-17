@@ -101,14 +101,17 @@ def test_decrypt_submission_multiple_files(
     kms_client.decrypt_aes_key.assert_called_once_with(kms_key, ANY)
 
 
-def test_decrypt_invalid_xml(kms_client, kms_key, encrypt_submission):
+def test_decrypt_invalid_xml(kms_client, kms_key, fake_aes_key, encrypt_submission):
     """Invalid XML structure raises an exception"""
+    plaintext_aes_key, _ = fake_aes_key
+    kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+
     original_data = b"<data>test submission</data>"
     encrypted_data = encrypt_submission(original_data, 0)
 
     invalid_xml = BytesIO(b"invalid xml")
 
-    with pytest.raises(InvalidSubmission):
+    with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
                 kms_client,
@@ -117,3 +120,65 @@ def test_decrypt_invalid_xml(kms_client, kms_key, encrypt_submission):
                 encrypted_data=[encrypted_data],
             )
         )
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # instanceID missing
+    encrypted_key = base64.b64encode(b"fake-encrypted-key").decode("utf-8")
+    encrypted_signature = base64.b64encode(b"fake-encrypted-signature").decode("utf-8")
+    xml_content = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          submissionDate="2025-02-13T13:46:07.458944+00:00"
+          xmlns="http://opendatakit.org/submissions">
+        <base64EncryptedKey>{encrypted_key}</base64EncryptedKey>
+        <media>
+            <file>kingfisher.jpeg.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+        <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
+    </data>""".strip()
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                kms_client,
+                key_id=kms_key,
+                submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
+                encrypted_data=[encrypted_data],
+            )
+        )
+
+    assert str(exc_info.value) == "instanceID not found in submission.xml"
+
+    # base64EncryptedKey
+    xml_content = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+          submissionDate="2025-02-13T13:46:07.458944+00:00"
+          xmlns="http://opendatakit.org/submissions">
+        <meta xmlns="http://openrosa.org/xforms">
+            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
+        </meta>
+        <media>
+            <file>kingfisher.jpeg.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+        <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
+    </data>
+    """.strip()
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                kms_client,
+                key_id=kms_key,
+                submission_xml=BytesIO(xml_content.encode("utf-8")).read(),
+                encrypted_data=[encrypted_data],
+            )
+        )
+
+    assert (
+        str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
+    )
