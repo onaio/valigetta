@@ -6,6 +6,7 @@ import base64
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Iterable, Iterator
 
@@ -96,6 +97,26 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
     return bytes(iv_seed_array)
 
 
+def _decrypt_file(file: BytesIO, aes_key: bytes, instance_id: str, index: int) -> bytes:
+    """Decrypt a single file.
+
+    :param file: File to be decrypted
+    :param aes_key: Symmetric key used during encryption
+    :param instance_id: instanceID of the submission
+    :param index: Counter used for mutating the IV
+    :return: Decrypted file in bytes
+    """
+    logger.debug("Decrypting index %d", index)
+    iv = _get_submission_iv(instance_id, aes_key, index)
+    cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+
+    decrypted_chunks = []
+    while chunk := file.read(4096):  # Read chunks of 4KB
+        decrypted_chunks.append(cipher_aes.decrypt(chunk))
+
+    return b"".join(decrypted_chunks)
+
+
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
@@ -121,10 +142,11 @@ def decrypt_submission(
     submission_xml.seek(0)  # Reset file pointer
     instance_id = _get_instance_id(submission_xml.read())
 
-    for index, file in enumerate(encrypted_files):
-        logger.debug("Decrypting index %d", index)
-        iv = _get_submission_iv(instance_id, aes_key, index)
-        cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
+    with ThreadPoolExecutor() as executor:
+        futures = {
+            executor.submit(_decrypt_file, file, aes_key, instance_id, index): index
+            for index, file in enumerate(encrypted_files)
+        }
 
-        while chunk := file.read(4096):  # Read chunks of 4KB
-            yield cipher_aes.decrypt(chunk)
+        for future in futures:
+            yield future.result()
