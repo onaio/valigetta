@@ -110,11 +110,8 @@ def _decrypt_file(file: BytesIO, aes_key: bytes, instance_id: str, index: int) -
     iv = _get_submission_iv(instance_id, aes_key, index)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
-    decrypted_chunks = []
     while chunk := file.read(4096):  # Read chunks of 4KB
-        decrypted_chunks.append(cipher_aes.decrypt(chunk))
-
-    return b"".join(decrypted_chunks)
+        yield cipher_aes.decrypt(chunk)
 
 
 def decrypt_submission(
@@ -125,7 +122,6 @@ def decrypt_submission(
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
-    :param key_id: AWS KMS key used for decryption
     :param submission_xml: Submission XML file contents
     :param encrypted_files: An iterable yielding encrypted file contents
     :return: A generator yielding decrypted data chunks
@@ -149,4 +145,7 @@ def decrypt_submission(
         }
 
         for future in futures:
-            yield future.result()
+            index = futures[future]
+
+            for chunk in future.result():  # Process each chunk as it's available
+                yield index, chunk
