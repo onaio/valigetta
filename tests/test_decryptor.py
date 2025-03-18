@@ -69,12 +69,12 @@ def test_decrypt_submission(
     aws_kms_client.key_id = aws_kms_key
     decrypted_files = defaultdict(bytearray)
 
-    for index, chunk in decrypt_submission(
+    for index, chunks in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
         encrypted_files=[encrypted_file],
     ):
-        decrypted_files[index].extend(chunk)
+        decrypted_files[index].extend(chunks)
 
     assert decrypted_files[0] == original_data
 
@@ -98,12 +98,12 @@ def test_decrypt_submission_multiple_files(
 
     decrypted_files = defaultdict(bytearray)
 
-    for index, chunk in decrypt_submission(
+    for index, chunks in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
         encrypted_files=encrypted_files_generator(),
     ):
-        decrypted_files[index].extend(chunk)
+        decrypted_files[index].extend(chunks)
 
     assert decrypted_files[0] == original_data[0]
     assert decrypted_files[1] == original_data[1]

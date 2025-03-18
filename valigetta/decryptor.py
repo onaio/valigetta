@@ -8,7 +8,7 @@ import logging
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Tuple
 
 from Crypto.Cipher import AES
 
@@ -120,7 +120,7 @@ def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
     encrypted_files: Iterable[BytesIO],
-) -> Iterator[bytes]:
+) -> Iterator[Tuple[int, bytes]]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
