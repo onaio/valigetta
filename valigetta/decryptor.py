@@ -97,7 +97,9 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
     return bytes(iv_seed_array)
 
 
-def _decrypt_file(file: BytesIO, aes_key: bytes, instance_id: str, index: int) -> bytes:
+def _decrypt_file(
+    file: BytesIO, aes_key: bytes, instance_id: str, index: int
+) -> Iterator[bytes]:
     """Decrypt a single file.
 
     :param file: File to be decrypted
