@@ -6,7 +6,7 @@ import base64
 import hashlib
 import logging
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Iterable, Iterator, Tuple
 
@@ -146,7 +146,7 @@ def decrypt_submission(
             for index, file in enumerate(encrypted_files)
         }
 
-        for future in futures:
+        for future in as_completed(futures):
             index = futures[future]
 
             for chunk in future.result():  # Process each chunk as it's available
