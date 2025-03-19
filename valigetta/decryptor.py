@@ -29,7 +29,7 @@ def _extract_encrypted_aes_key(submission_xml: bytes) -> str:
         namespace = {"n": "http://opendatakit.org/submissions"}
         encrypted_key_elem = tree.find("n:base64EncryptedKey", namespace)
 
-        if encrypted_key_elem is None:
+        if encrypted_key_elem is None or not encrypted_key_elem.text:
             raise InvalidSubmission(
                 "base64EncryptedKey element not found in submission.xml"
             )
@@ -58,7 +58,7 @@ def _get_instance_id(submission_xml: bytes) -> str:
                     "{http://openrosa.org/xforms}instanceID"
                 )
                 if instance_id_elem is not None and instance_id_elem.text:
-                    instance_id = instance_id_elem.text.strip()
+                    instance_id = instance_id_elem.text.strip().replace("\n", "")
 
         if not instance_id:
             raise InvalidSubmission("instanceID not found in submission.xml")
