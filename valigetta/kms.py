@@ -92,3 +92,12 @@ class AWSKMSClient(KMSClient):
         """
         response = self.boto3_client.describe_key(KeyId=self._ensure_key_id())
         return response["KeyMetadata"]
+
+    def update_key_description(self, description: str) -> None:
+        """Updates the description of a KMS key.
+
+        :param description: New description of the KMS key
+        """
+        self.boto3_client.update_key_description(
+            KeyId=self._ensure_key_id(), Description=description
+        )

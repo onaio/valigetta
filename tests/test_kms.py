@@ -75,3 +75,31 @@ def test_aws_describe_key(aws_kms_client, aws_kms_key):
 
     assert "KeyId" in response
     assert "AWSAccountId" in response
+
+
+def test_aws_describe_key_id_required(aws_kms_client, aws_kms_key):
+    """AWS client update_key_description requires key_id."""
+    with pytest.raises(ValueError) as exc_info:
+        aws_kms_client.describe_key()
+
+    assert str(exc_info.value) == "A key_id must be provided."
+
+
+def test_aws_update_key_description(aws_kms_client, aws_kms_key):
+    """AWS client update_key_description updates KMS key description."""
+    key_id = aws_kms_key
+    aws_kms_client.key_id = key_id
+    aws_kms_client.boto3_client.update_key_description = Mock()
+    aws_kms_client.update_key_description("New description")
+
+    aws_kms_client.boto3_client.update_key_description.assert_called_once_with(
+        KeyId=key_id, Description="New description"
+    )
+
+
+def test_aws_update_key_des_id_required(aws_kms_client, aws_kms_key):
+    """AWS client update_key_description requires key_id."""
+    with pytest.raises(ValueError) as exc_info:
+        aws_kms_client.update_key_description("New description")
+
+    assert str(exc_info.value) == "A key_id must be provided."
