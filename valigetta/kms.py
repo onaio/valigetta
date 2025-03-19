@@ -78,7 +78,7 @@ class AWSKMSClient(KMSClient):
         return response["Plaintext"]
 
     def get_public_key(self) -> bytes:
-        """Get AWS KMS key public key
+        """Get AWS KMS key's public key
 
         :return: Public key
         """
