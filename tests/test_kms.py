@@ -29,7 +29,7 @@ def test_aws_decrypt_aes_key(aws_kms_key, aws_kms_client, boto3_kms_client):
     assert decrypted_key == plaintext_key
 
 
-def test_aws_decrypt_aes_key_required(aws_kms_key, aws_kms_client, boto3_kms_client):
+def test_aws_dec_aes_key_id_required(aws_kms_key, aws_kms_client, boto3_kms_client):
     """AWS client decrypt_aes_key requires key_id"""
     # Encrypt a test AES key with KMS key
     plaintext_key = b"test-aes-key-1234"
@@ -56,7 +56,7 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
     assert response == b"fake-public-key"
 
 
-def test_aws_get_public_key_key_required(aws_kms_client):
+def test_aws_get_pub_key_id_required(aws_kms_client):
     """AWS client get_public_key requires key_id"""
     aws_kms_client.boto3_client.get_public_key = Mock(
         return_value={"PublicKey": b"fake-public-key"}
@@ -66,3 +66,12 @@ def test_aws_get_public_key_key_required(aws_kms_client):
         aws_kms_client.get_public_key()
 
     assert str(exc_info.value) == "A key_id must be provided."
+
+
+def test_aws_describe_key(aws_kms_client, aws_kms_key):
+    """AWS client describe_key returns key metadata."""
+    aws_kms_client.key_id = aws_kms_key
+    response = aws_kms_client.describe_key()
+
+    assert "KeyId" in response
+    assert "AWSAccountId" in response

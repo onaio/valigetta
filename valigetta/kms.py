@@ -84,3 +84,11 @@ class AWSKMSClient(KMSClient):
         """
         response = self.boto3_client.get_public_key(KeyId=self._ensure_key_id())
         return response["PublicKey"]
+
+    def describe_key(self) -> dict:
+        """Returns detailed information about a KMS key.
+
+        :return: Key detailed information
+        """
+        response = self.boto3_client.describe_key(KeyId=self._ensure_key_id())
+        return response["KeyMetadata"]
