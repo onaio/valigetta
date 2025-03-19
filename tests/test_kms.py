@@ -48,7 +48,7 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
     """AWS client get_public_key returns public key"""
     key_id = aws_kms_key
     aws_kms_client.key_id = key_id
-    aws_kms_client.kms_client.get_public_key = Mock(
+    aws_kms_client.boto3_client.get_public_key = Mock(
         return_value={"PublicKey": b"fake-public-key"}
     )
     response = aws_kms_client.get_public_key()
@@ -58,7 +58,7 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
 
 def test_aws_get_public_key_key_required(aws_kms_client):
     """AWS client get_public_key requires key_id"""
-    aws_kms_client.kms_client.get_public_key = Mock(
+    aws_kms_client.boto3_client.get_public_key = Mock(
         return_value={"PublicKey": b"fake-public-key"}
     )
 
