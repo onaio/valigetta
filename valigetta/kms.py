@@ -20,6 +20,11 @@ class KMSClient(ABC):
         """Decrypt AES symmetric key."""
         raise NotImplementedError("Subclasses must implement decrypt_aes_key method.")
 
+    @abstractmethod
+    def get_public_key(self) -> bytes:
+        """Returns the public key of an asymmetric key"""
+        raise NotImplementedError("Subclasses must implement get_public_key method.")
+
 
 class AWSKMSClient(KMSClient):
     """AWS KMS Client Implementation."""
@@ -38,6 +43,12 @@ class AWSKMSClient(KMSClient):
             region_name=region_name,
         )
         self.key_id = key_id
+
+    def _ensure_key_id(self) -> str:
+        """Ensure key_id is set before performing KMS operations."""
+        if not self.key_id:
+            raise ValueError("A key_id must be provided.")
+        return self.key_id
 
     def create_key(self, description: Optional[str] = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
@@ -59,12 +70,17 @@ class AWSKMSClient(KMSClient):
         :param encrypted_aes_key: Encrypted symmetric key.
         :return: Decrypted AES key in plaintext.
         """
-        if not self.key_id:
-            raise ValueError("A key_id must be provided for decryption.")
-
         response = self.kms_client.decrypt(
             CiphertextBlob=encrypted_aes_key,
-            KeyId=self.key_id,
+            KeyId=self._ensure_key_id(),
             EncryptionAlgorithm="RSAES_OAEP_SHA_256",
         )
         return response["Plaintext"]
+
+    def get_public_key(self) -> bytes:
+        """Get AWS KMS key public key
+
+        :return: Public key
+        """
+        response = self.kms_client.get_public_key(KeyId=self._ensure_key_id())
+        return response["PublicKey"]
