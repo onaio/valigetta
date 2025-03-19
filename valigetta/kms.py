@@ -36,7 +36,7 @@ class AWSKMSClient(KMSClient):
         aws_secret_access_key: Optional[str] = None,
         region_name: Optional[str] = None,
     ):
-        self.kms_client = boto3.client(
+        self.boto3_client = boto3.client(
             "kms",
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
@@ -57,7 +57,7 @@ class AWSKMSClient(KMSClient):
                             sensitive material.
         :return: Metadata of the created key.
         """
-        response = self.kms_client.create_key(
+        response = self.boto3_client.create_key(
             KeyUsage="ENCRYPT_DECRYPT",
             KeySpec="RSA_2048",
             Description=description if description else "",
@@ -70,7 +70,7 @@ class AWSKMSClient(KMSClient):
         :param encrypted_aes_key: Encrypted symmetric key.
         :return: Decrypted AES key in plaintext.
         """
-        response = self.kms_client.decrypt(
+        response = self.boto3_client.decrypt(
             CiphertextBlob=encrypted_aes_key,
             KeyId=self._ensure_key_id(),
             EncryptionAlgorithm="RSAES_OAEP_SHA_256",
@@ -82,5 +82,5 @@ class AWSKMSClient(KMSClient):
 
         :return: Public key
         """
-        response = self.kms_client.get_public_key(KeyId=self._ensure_key_id())
+        response = self.boto3_client.get_public_key(KeyId=self._ensure_key_id())
         return response["PublicKey"]
