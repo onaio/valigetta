@@ -101,3 +101,10 @@ class AWSKMSClient(KMSClient):
         self.boto3_client.update_key_description(
             KeyId=self._ensure_key_id(), Description=description
         )
+
+    def disable_key(self):
+        """Sets the state of a KMS key to disabled
+
+        Prevents use of the KMS key.
+        """
+        self.boto3_client.disable_key(KeyId=self._ensure_key_id())
