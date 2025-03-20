@@ -84,3 +84,27 @@ class AWSKMSClient(KMSClient):
         """
         response = self.boto3_client.get_public_key(KeyId=self._ensure_key_id())
         return response["PublicKey"]
+
+    def describe_key(self) -> dict:
+        """Returns detailed information about a KMS key.
+
+        :return: Key detailed information
+        """
+        response = self.boto3_client.describe_key(KeyId=self._ensure_key_id())
+        return response["KeyMetadata"]
+
+    def update_key_description(self, description: str) -> None:
+        """Updates the description of a KMS key.
+
+        :param description: New description of the KMS key
+        """
+        self.boto3_client.update_key_description(
+            KeyId=self._ensure_key_id(), Description=description
+        )
+
+    def disable_key(self):
+        """Sets the state of a KMS key to disabled
+
+        Prevents use of the KMS key.
+        """
+        self.boto3_client.disable_key(KeyId=self._ensure_key_id())
