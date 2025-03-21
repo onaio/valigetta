@@ -150,4 +150,6 @@ def decrypt_submission(
             index = futures[future]
 
             for chunk in future.result():  # Process each chunk as it's available
+                logger.debug("Decrypted chunk for index %d", index)
+
                 yield index, chunk
