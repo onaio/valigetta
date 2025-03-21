@@ -65,14 +65,15 @@ def test_decrypt_submission(
     plaintext_aes_key, fake_encrypted_key = fake_aes_key
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
     original_data = b"<data>test submission</data>"
-    encrypted_file = encrypt_submission(original_data, 0)
+    file_index = 0
+    encrypted_file = encrypt_submission(original_data, file_index)
     aws_kms_client.key_id = aws_kms_key
     decrypted_files = defaultdict(bytearray)
 
     for index, chunk in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
-        encrypted_files=[encrypted_file],
+        encrypted_files=[(file_index, encrypted_file)],
     ):
         decrypted_files[index].extend(chunk)
 
@@ -92,7 +93,7 @@ def test_decrypt_submission_multiple_files(
 
     def encrypted_files_generator():
         for index, datum in enumerate(original_data):
-            yield encrypt_submission(datum, index)
+            yield index, encrypt_submission(datum, index)
 
     aws_kms_client.key_id = aws_kms_key
 
@@ -116,20 +117,19 @@ def test_decrypt_invalid_xml(
 ):
     """Invalid XML structure raises an exception"""
     plaintext_aes_key, _ = fake_aes_key
+    aws_kms_client.key_id = aws_kms_key
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_data = b"<data>test submission</data>"
     encrypted_file = encrypt_submission(original_data, 0)
-
-    invalid_xml = BytesIO(b"invalid xml")
-    aws_kms_client.key_id = aws_kms_key
+    encrypted_files = [(0, encrypted_file)]
 
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
                 aws_kms_client,
-                submission_xml=invalid_xml,
-                encrypted_files=[encrypted_file],
+                submission_xml=BytesIO(b"invalid xml"),
+                encrypted_files=encrypted_files,
             )
         )
 
@@ -199,18 +199,19 @@ def test_decrypt_large_file(
 ):
     """A file larger than 4KB is decrypted correctly."""
     plaintext_aes_key, fake_encrypted_key = fake_aes_key
+    aws_kms_client.key_id = aws_kms_key
     aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
 
     original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
     encrypted_file = encrypt_submission(original_data, 0)
+    encrypted_files = [(0, encrypted_file)]
 
-    aws_kms_client.key_id = aws_kms_key
     decrypted_files = defaultdict(bytearray)
 
     for index, chunk in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
-        encrypted_files=[encrypted_file],
+        encrypted_files=encrypted_files,
     ):
         decrypted_files[index].extend(chunk)
 
