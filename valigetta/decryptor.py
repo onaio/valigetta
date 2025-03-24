@@ -121,7 +121,7 @@ def decrypt_file(
         yield cipher_aes.decrypt(chunk)
 
 
-def extract_dec_aes_key(kms_client: KMSClient, submission_xml: BytesIO) -> bytes:
+def extract_n_decrypt_aes_key(kms_client: KMSClient, submission_xml: BytesIO) -> bytes:
     """Extract encrypted AES key from submission XML and decrypt it
 
     :param kms_client: KMSClient instance
@@ -148,7 +148,7 @@ def decrypt_submission(
     :param encrypted_files: An iterable yielding encrypted file contents
     :return: A generator yielding decrypted data chunks
     """
-    aes_key = extract_dec_aes_key(kms_client, submission_xml)
+    aes_key = extract_n_decrypt_aes_key(kms_client, submission_xml)
     instance_id = extract_instance_id(submission_xml)
 
     with ThreadPoolExecutor() as executor:

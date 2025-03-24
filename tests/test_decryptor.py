@@ -10,9 +10,9 @@ from valigetta.decryptor import (
     _get_submission_iv,
     decrypt_file,
     decrypt_submission,
-    extract_dec_aes_key,
     extract_encrypted_aes_key,
     extract_instance_id,
+    extract_n_decrypt_aes_key,
 )
 from valigetta.exceptions import InvalidSubmission
 
@@ -238,7 +238,7 @@ def test_extract_dec_aes_key(
     """Extraction and decryption of AES key is successful."""
     aws_kms_client.key_id = aws_kms_key
     plaintext_aes_key, _ = fake_aes_key
-    aes_key = extract_dec_aes_key(aws_kms_client, fake_submission_xml)
+    aes_key = extract_n_decrypt_aes_key(aws_kms_client, fake_submission_xml)
 
     assert aes_key == plaintext_aes_key
 
