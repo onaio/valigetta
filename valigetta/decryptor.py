@@ -119,7 +119,7 @@ def _decrypt_file(
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
-    encrypted_files: Iterable[BytesIO],
+    encrypted_files: Iterable[Tuple[int, BytesIO]],
 ) -> Iterator[Tuple[int, bytes]]:
     """Decrypt submission and media files using AWS KMS.
 
@@ -143,11 +143,13 @@ def decrypt_submission(
     with ThreadPoolExecutor() as executor:
         futures = {
             executor.submit(_decrypt_file, file, aes_key, instance_id, index): index
-            for index, file in enumerate(encrypted_files)
+            for index, file in encrypted_files
         }
 
         for future in as_completed(futures):
             index = futures[future]
 
             for chunk in future.result():  # Process each chunk as it's available
+                logger.debug("Decrypted chunk for index %d", index)
+
                 yield index, chunk
