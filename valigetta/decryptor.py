@@ -18,14 +18,15 @@ from valigetta.kms import KMSClient
 logger = logging.getLogger(__name__)
 
 
-def _extract_encrypted_aes_key(submission_xml: bytes) -> str:
-    """Extract encrypted AES key from submission.xml
+def extract_encrypted_aes_key(submission_xml: BytesIO) -> str:
+    """Extract encrypted AES key from submission XML
 
     :param submission_xml: Submission XML file
     :return: value from the tag base64EncryptedKey
     """
     try:
-        tree = ET.fromstring(submission_xml)
+        submission_xml.seek(0)  # Reset file pointer
+        tree = ET.fromstring(submission_xml.read())
         namespace = {"n": "http://opendatakit.org/submissions"}
         encrypted_key_elem = tree.find("n:base64EncryptedKey", namespace)
 
@@ -44,10 +45,14 @@ def _extract_encrypted_aes_key(submission_xml: bytes) -> str:
         raise
 
 
-def _get_instance_id(submission_xml: bytes) -> str:
-    """Extract instanceID from submission XML"""
+def extract_instance_id(submission_xml: BytesIO) -> str:
+    """Extract instanceID from submission XML
+
+    :param submission_xml: Submission XML file
+    """
     try:
-        tree = ET.fromstring(submission_xml)
+        submission_xml.seek(0)  # Reset file pointer
+        tree = ET.fromstring(submission_xml.read())
         instance_id = tree.attrib.get("instanceID")
 
         if instance_id is None:
@@ -97,7 +102,7 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
     return bytes(iv_seed_array)
 
 
-def _decrypt_file(
+def decrypt_file(
     file: BytesIO, aes_key: bytes, instance_id: str, index: int
 ) -> Iterator[bytes]:
     """Decrypt a single file.
@@ -108,12 +113,27 @@ def _decrypt_file(
     :param index: Counter used for mutating the IV
     :return: Decrypted file in bytes
     """
-    logger.debug("Decrypting index %d", index)
+    logger.debug("Generating IV for index %d", index)
     iv = _get_submission_iv(instance_id, aes_key, index)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
     while chunk := file.read(4096):  # Read chunks of 4KB
         yield cipher_aes.decrypt(chunk)
+
+
+def extract_dec_aes_key(kms_client: KMSClient, submission_xml: BytesIO) -> bytes:
+    """Extract encrypted AES key from submission XML and decrypt it
+
+    :param kms_client: KMSClient instance
+    :param submission_xml: Submission XML file
+    :return Decrypted AES key
+    """
+    logger.debug("Extracting encrypted AES key from submission XML.")
+    encrypted_aes_key_b64 = extract_encrypted_aes_key(submission_xml)
+    encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
+
+    logger.debug("Decrypting AES key using AWS KMS.")
+    return kms_client.decrypt_aes_key(encrypted_aes_key)
 
 
 def decrypt_submission(
@@ -128,22 +148,13 @@ def decrypt_submission(
     :param encrypted_files: An iterable yielding encrypted file contents
     :return: A generator yielding decrypted data chunks
     """
-    logger.debug("Extracting encrypted AES key from submission XML.")
-    submission_xml.seek(0)  # Reset file pointer
-    encrypted_aes_key_b64 = _extract_encrypted_aes_key(submission_xml.read())
-    encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
-
-    logger.debug("Decrypting AES key using AWS KMS.")
-    aes_key = kms_client.decrypt_aes_key(encrypted_aes_key)
-
-    logger.debug("Generating IV for AES decryption.")
-    submission_xml.seek(0)  # Reset file pointer
-    instance_id = _get_instance_id(submission_xml.read())
+    aes_key = extract_dec_aes_key(kms_client, submission_xml)
+    instance_id = extract_instance_id(submission_xml)
 
     with ThreadPoolExecutor() as executor:
         futures = {
-            executor.submit(_decrypt_file, file, aes_key, instance_id, index): index
-            for index, file in encrypted_files
+            executor.submit(decrypt_file, file, aes_key, instance_id, index): index
+            for index, file in enumerate(encrypted_files)
         }
 
         for future in as_completed(futures):

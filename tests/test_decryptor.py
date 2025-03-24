@@ -6,7 +6,14 @@ from unittest.mock import MagicMock
 import pytest
 from Crypto.Cipher import AES
 
-from valigetta.decryptor import _get_submission_iv, decrypt_submission
+from valigetta.decryptor import (
+    _get_submission_iv,
+    decrypt_file,
+    decrypt_submission,
+    extract_dec_aes_key,
+    extract_encrypted_aes_key,
+    extract_instance_id,
+)
 from valigetta.exceptions import InvalidSubmission
 
 
@@ -223,3 +230,47 @@ def test_decrypt_large_file(
     assert decrypted_files[1] == original_data[1]
 
     aws_kms_client.decrypt_aes_key.assert_called_once_with(fake_encrypted_key)
+
+
+def test_extract_dec_aes_key(
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key
+):
+    """Extraction and decryption of AES key is successful."""
+    aws_kms_client.key_id = aws_kms_key
+    plaintext_aes_key, _ = fake_aes_key
+    aes_key = extract_dec_aes_key(aws_kms_client, fake_submission_xml)
+
+    assert aes_key == plaintext_aes_key
+
+
+def test_extract_instance_id(fake_submission_xml):
+    """Extract of instanceID from submission XML is successful."""
+    instance_id = extract_instance_id(fake_submission_xml)
+
+    assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+
+
+def test_extract_encrpted_aes_key(fake_submission_xml, fake_aes_key):
+    """Extraction of encrypted AES key from submission XML is successful."""
+    _, fake_encrypted_key = fake_aes_key
+    enc_aes_key = extract_encrypted_aes_key(fake_submission_xml)
+
+    assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
+
+
+def test_decrypt_file(fake_aes_key, encrypt_submission):
+    """Decrypting a single file works."""
+    plaintext_aes_key, _ = fake_aes_key
+    original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
+    encrypted_file = encrypt_submission(original_data, 0)
+    decrypted_file = bytearray()
+
+    for chunk in decrypt_file(
+        encrypted_file,
+        plaintext_aes_key,
+        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+        0,
+    ):
+        decrypted_file.extend(chunk)
+
+    assert decrypted_file == original_data
