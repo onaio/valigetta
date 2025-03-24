@@ -154,7 +154,7 @@ def decrypt_submission(
     with ThreadPoolExecutor() as executor:
         futures = {
             executor.submit(decrypt_file, file, aes_key, instance_id, index): index
-            for index, file in enumerate(encrypted_files)
+            for index, file in encrypted_files
         }
 
         for future in as_completed(futures):
