@@ -1,4 +1,5 @@
 import base64
+import hashlib
 from collections import defaultdict
 from io import BytesIO
 from unittest.mock import MagicMock
@@ -11,8 +12,14 @@ from valigetta.decryptor import (
     decrypt_file,
     decrypt_submission,
     extract_encrypted_aes_key,
+    extract_encrypted_signature,
+    extract_encrypted_submission_file_name,
+    extract_form_id,
     extract_instance_id,
+    extract_media_file_names,
     extract_n_decrypt_aes_key,
+    extract_version,
+    is_submission_valid,
 )
 from valigetta.exceptions import InvalidSubmission
 
@@ -27,25 +34,104 @@ def fake_aes_key(boto3_kms_client, aws_kms_key):
 
 
 @pytest.fixture
-def fake_submission_xml(fake_aes_key):
+def fake_decrypted_media():
+    """Fake decrypted media files for submission."""
+    return {
+        "sunset.png": BytesIO(b"Fake PNG image data"),
+        "forest.mp4": BytesIO(b"Fake MP4 video data"),
+    }
+
+
+@pytest.fixture
+def fake_decrypted_submission():
+    """Fake decrypted XML content for the submission."""
+    xml_content = """<?xml version="1.0"?>
+    <data id="test_valigetta" version="202502131337"
+          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+          xmlns="http://opendatakit.org/submissions">
+        <meta xmlns="http://openrosa.org/xforms">
+            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
+        </meta>
+        <media>
+            <file>sunset.png</file>
+            <file>forest.mp4</file>
+        </media>
+    </data>
+    """.strip()
+
+    return BytesIO(xml_content.encode("utf-8"))
+
+
+@pytest.fixture
+def fake_signature(
+    boto3_kms_client,
+    aws_kms_key,
+    fake_aes_key,
+    fake_decrypted_submission,
+    fake_decrypted_media,
+):
+    """Generate an encrypted signature using AWS KMS."""
+
+    def get_md5_hash_from_file(file: BytesIO) -> str:
+        """Computes the MD5 hash of a file's content."""
+        file.seek(0)
+        return hashlib.md5(file.read()).hexdigest()
+
+    def compute_digest(message: str) -> bytes:
+        """Computes the MD5 digest of the given message (UTF-8 encoded)."""
+        return hashlib.md5(message.encode("utf-8")).digest()
+
+    _, fake_encrypted_key = fake_aes_key
+
+    signature_parts = [
+        "test_valigetta",
+        "202502131337",
+        base64.b64encode(fake_encrypted_key).decode("utf-8"),
+        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+    ]
+
+    # Add media files
+    for media_name, media_file in fake_decrypted_media.items():
+        submission_md5_hash = get_md5_hash_from_file(media_file)
+        signature_parts.append(f"{media_name}::{submission_md5_hash}")
+
+    # Add submission file
+    submission_md5_hash = get_md5_hash_from_file(fake_decrypted_submission)
+    signature_parts.append(f"submission.xml::{submission_md5_hash}")
+    # Construct final signature string
+    signature_data = "\n".join(signature_parts) + "\n"
+    # Compute MD5 digest before encrypting
+    signature_md5_digest = compute_digest(signature_data)
+    # Encrypt MD5 digest
+    response = boto3_kms_client.encrypt(
+        KeyId=aws_kms_key, Plaintext=signature_md5_digest
+    )
+
+    return response["CiphertextBlob"]
+
+
+@pytest.fixture
+def fake_submission_xml(fake_aes_key, fake_signature):
     """Fake submission XML with an encrypted key and signature."""
     _, fake_encrypted_key = fake_aes_key
-    encrypted_key = base64.b64encode(fake_encrypted_key).decode("utf-8")
-    encrypted_signature = base64.b64encode(b"fake-encrypted-signature").decode("utf-8")
+    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+    encrypted_signature_b64 = base64.b64encode(fake_signature).decode("utf-8")
+
     xml_content = f"""<?xml version="1.0"?>
     <data encrypted="yes" id="test_valigetta" version="202502131337"
           instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
           submissionDate="2025-02-13T13:46:07.458944+00:00"
           xmlns="http://opendatakit.org/submissions">
-        <base64EncryptedKey>{encrypted_key}</base64EncryptedKey>
+        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
         <meta xmlns="http://openrosa.org/xforms">
             <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
         </meta>
         <media>
-            <file>kingfisher.jpeg.enc</file>
+            <file>sunset.png.enc</file>
+            <file>forest.mp4.enc</file>
         </media>
         <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
-        <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
+        <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
     </data>
     """.strip()
 
@@ -249,13 +335,43 @@ def test_extract_instance_id(fake_submission_xml):
 
     assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_instance_id(BytesIO(b"invalid xml"))
 
-def test_extract_encrpted_aes_key(fake_submission_xml, fake_aes_key):
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing instanceID
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_instance_id(BytesIO(b"<data>hello</data>"))
+
+    assert str(exc_info.value) == "instanceID not found in submission.xml"
+
+
+def test_extract_encrypted_aes_key(fake_submission_xml, fake_aes_key):
     """Extraction of encrypted AES key from submission XML is successful."""
     _, fake_encrypted_key = fake_aes_key
     enc_aes_key = extract_encrypted_aes_key(fake_submission_xml)
 
     assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_aes_key(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing encrypted AES key
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_aes_key(BytesIO(b"<data>hello</data>"))
+
+    assert (
+        str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
+    )
 
 
 def test_decrypt_file(fake_aes_key, encrypt_submission):
@@ -274,3 +390,130 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
         decrypted_file.extend(chunk)
 
     assert decrypted_file == original_data
+
+
+def test_extract_encrypted_signature(fake_submission_xml, fake_signature):
+    """Extraction of encrypted signature is successful."""
+    enc_signature = extract_encrypted_signature(fake_submission_xml)
+
+    assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_signature(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing signature
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_signature(BytesIO(b"<data>hello</data>"))
+
+    assert (
+        str(exc_info.value)
+        == "base64EncryptedElementSignature element not found in submission.xml"
+    )
+
+
+def test_extract_encrypted_xml_file_name(fake_submission_xml):
+    """Extraction of encrypted xml file name is successful."""
+    enc_xml_file_name = extract_encrypted_submission_file_name(fake_submission_xml)
+
+    assert enc_xml_file_name == "submission.xml.enc"
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_submission_file_name(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing xml file name
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_encrypted_submission_file_name(BytesIO(b"<data>hello</data>"))
+
+    assert str(exc_info.value) == "encryptedXmlFile element not found in submission.xml"
+
+
+def test_extract_form_id(fake_submission_xml):
+    """Extraction of submission's form id is successful."""
+    form_id = extract_form_id(fake_submission_xml)
+
+    assert form_id == "test_valigetta"
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_form_id(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing form id
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_form_id(BytesIO(b"<data>hello</data>"))
+
+    assert str(exc_info.value) == "form id not found in submission.xml"
+
+
+def test_extract_version(fake_submission_xml):
+    """Extraction of submission's version is successful."""
+    version = extract_version(fake_submission_xml)
+
+    assert version == "202502131337"
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_version(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing version
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_version(BytesIO(b"<data>hello</data>"))
+
+    assert str(exc_info.value) == "version not found in submission.xml"
+
+
+def test_extract_media_file_names(fake_submission_xml):
+    """Extraction of media file names is successful."""
+    media_file_names = extract_media_file_names(fake_submission_xml)
+
+    assert media_file_names == ["kingfisher.jpeg.enc"]
+
+    # Invalid XML
+    with pytest.raises(InvalidSubmission) as exc_info:
+        extract_media_file_names(BytesIO(b"invalid xml"))
+
+    assert (
+        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
+    )
+
+    # Missing media
+    media_file_names = extract_media_file_names(BytesIO(b"<data>hello</data>"))
+
+    assert len(media_file_names) == 0
+
+
+def test_is_submssion_valid(
+    fake_decrypted_media,
+    fake_decrypted_submission,
+    aws_kms_client,
+    fake_submission_xml,
+    aws_kms_key,
+):
+    """Is valid check for decrypted submission contents works."""
+    aws_kms_client.key_id = aws_kms_key
+
+    is_valid = is_submission_valid(
+        aws_kms_client,
+        fake_submission_xml,
+        fake_decrypted_submission,
+        fake_decrypted_media,
+    )
+
+    assert is_valid

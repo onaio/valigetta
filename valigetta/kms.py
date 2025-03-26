@@ -16,9 +16,9 @@ class KMSClient(ABC):
         raise NotImplementedError("Subclasses must implement create_key method.")
 
     @abstractmethod
-    def decrypt_aes_key(self, encrypted_aes_key: bytes) -> bytes:
-        """Decrypt AES symmetric key."""
-        raise NotImplementedError("Subclasses must implement decrypt_aes_key method.")
+    def decrypt(self, ciphertext: bytes) -> bytes:
+        """Decrypts ciphertext that was encrypted by a KMS key"""
+        raise NotImplementedError("Subclasses must implement decrypt method.")
 
     @abstractmethod
     def get_public_key(self) -> bytes:
@@ -64,14 +64,14 @@ class AWSKMSClient(KMSClient):
         )
         return response["KeyMetadata"]
 
-    def decrypt_aes_key(self, encrypted_aes_key: bytes) -> bytes:
-        """Decrypt AES symmetric key using AWS KMS.
+    def decrypt(self, ciphertext: bytes) -> bytes:
+        """Decrypt ciphertext that was encrypted using AWS KMS key.
 
         :param encrypted_aes_key: Encrypted symmetric key.
         :return: Decrypted AES key in plaintext.
         """
         response = self.boto3_client.decrypt(
-            CiphertextBlob=encrypted_aes_key,
+            CiphertextBlob=ciphertext,
             KeyId=self._ensure_key_id(),
             EncryptionAlgorithm="RSAES_OAEP_SHA_256",
         )
