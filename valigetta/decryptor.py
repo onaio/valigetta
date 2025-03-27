@@ -199,13 +199,13 @@ def decrypt_file(
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
-    enc_files: Iterable[Tuple[str, BytesIO]],
+    enc_files: List[Tuple[str, BytesIO]],
 ) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
     :param submission_xml: Submission XML file
-    :param enc_files: An iterable yielding encrypted files
+    :param enc_files: Encrypted files
     :return: A generator yielding decrypted files
     """
     tree = _parse_submission_xml(submission_xml)
@@ -253,7 +253,7 @@ def decrypt_submission(
             )
         )
 
-    return decrypt_files()
+    yield from decrypt_files()
 
 
 def _strip_enc_extension(encrypted_file_name: str) -> str:
