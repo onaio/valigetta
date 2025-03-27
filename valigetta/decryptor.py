@@ -339,9 +339,6 @@ def is_submission_valid(
         """Computes the MD5 digest of the given message"""
         return hashlib.md5(message.encode("utf-8")).digest()
 
-    if dec_files is None:
-        dec_files = []
-
     try:
         computed_signature = _build_signature(tree, dec_files)
         computed_signature_digest = compute_digest(computed_signature)
