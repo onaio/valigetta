@@ -313,13 +313,15 @@ def _build_signature(
 
         return md5.hexdigest().zfill(32)  # Ensure 32-character padding
 
-    signature_parts = []
-    signature_parts.append(extract_form_id(tree))
-    signature_parts.append(extract_version(tree))
-    signature_parts.append(extract_encrypted_aes_key(tree))
-    signature_parts.append(extract_instance_id(tree))
+    signature_parts = [
+        extract_form_id(tree),
+        extract_version(tree),
+        extract_encrypted_aes_key(tree),
+        extract_instance_id(tree),
+    ]
+    enc_media_names = extract_encrypted_media_file_names(tree)
 
-    for enc_media_name in extract_encrypted_media_file_names(tree):
+    for enc_media_name in enc_media_names:
         dec_media_name = _strip_enc_extension(enc_media_name)
 
         if dec_media_name in dec_media:
