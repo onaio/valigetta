@@ -392,10 +392,9 @@ def test_extract_media_file_names(fake_submission_tree):
 
 
 def test_is_submssion_valid(
-    fake_decrypted_media,
-    fake_decrypted_submission,
     aws_kms_client,
     fake_submission_tree,
+    fake_decrypted_files,
     aws_kms_key,
     fake_aes_key,
 ):
@@ -405,32 +404,15 @@ def test_is_submssion_valid(
     assert is_submission_valid(
         aws_kms_client,
         fake_submission_tree,
-        fake_decrypted_submission,
-        list(fake_decrypted_media.items()),
+        list(fake_decrypted_files.items()),
     )
 
-    # Missing media
+    # Corrupted file
     assert not is_submission_valid(
         aws_kms_client,
         fake_submission_tree,
-        fake_decrypted_submission,
-    )
-
-    # Corrupted submission
-    assert not is_submission_valid(
-        aws_kms_client,
-        fake_submission_tree,
-        BytesIO(b"corrupted submission"),
-        list(fake_decrypted_media.items()),
-    )
-
-    # Corrupted media
-    assert not is_submission_valid(
-        aws_kms_client,
-        fake_submission_tree,
-        fake_decrypted_submission,
         list(
-            {**fake_decrypted_media, "sunset.png": BytesIO(b"corrupted sunset")}.items()
+            {**fake_decrypted_files, "sunset.png": BytesIO(b"corrupted sunset")}.items()
         ),
     )
 
@@ -455,9 +437,12 @@ def test_is_submssion_valid(
         <base64EncryptedElementSignature>{enc_signature_b64}</base64EncryptedElementSignature>
     </data>
     """.strip()
+
+    dec_files = list(fake_decrypted_files.items())
+    dec_files[0] = ("submission.xml", BytesIO(submission_xml.encode("utf-8")))
+
     assert not is_submission_valid(
         aws_kms_client,
         fake_submission_tree,
-        BytesIO(submission_xml.encode("utf-8")),
-        list(fake_decrypted_media.items()),
+        dec_files,
     )
