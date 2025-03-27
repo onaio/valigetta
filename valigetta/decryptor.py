@@ -221,32 +221,25 @@ def decrypt_submission(
     enc_submission_name = extract_encrypted_submission_file_name(tree)
     enc_media_names = extract_encrypted_media_file_names(tree)
 
-    def decrypt_task(enc_file_name: str, enc_file: BytesIO):
-        if enc_file_name == enc_submission_name:
-            index = 0  # Submission files use index 0
-        else:
-            try:
-                index = enc_media_names.index(enc_file_name) + 1
-            except ValueError:
-                raise InvalidSubmission(
-                    f"Media {enc_file_name} not found in submission.xml"
-                )
-
-        temp_buffer = BytesIO()
-
-        for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
-            temp_buffer.write(chunk)
-
-        temp_buffer.seek(0)  # Reset stream position for reading
-
-        dec_file_name = _strip_enc_extension(enc_file_name)
-
-        return dec_file_name, temp_buffer
-
     def decrypt_files():
-        for name, file in enc_files:
-            dec_file_name, dec_file = decrypt_task(name, file)
-            yield dec_file_name, dec_file
+        for enc_file_name, enc_file in enc_files:
+            if enc_file_name == enc_submission_name:
+                index = 0  # Submission files use index 0
+            else:
+                try:
+                    index = enc_media_names.index(enc_file_name) + 1
+                except ValueError:
+                    raise InvalidSubmission(
+                        f"Media {enc_file_name} not found in submission.xml"
+                    )
+
+            temp_buffer = BytesIO()
+
+            for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
+                temp_buffer.write(chunk)
+
+            temp_buffer.seek(0)  # Reset stream position for reading
+            yield _strip_enc_extension(enc_file_name), temp_buffer
 
     if not is_submission_valid(
         kms_client=kms_client,
