@@ -56,7 +56,7 @@ def extract_encrypted_aes_key(tree: ET.Element) -> str:
     if enc_aes_key:
         return enc_aes_key
 
-    raise InvalidSubmission("base64EncryptedKey not found in submission.xml")
+    raise InvalidSubmission("base64EncryptedKey element not found in submission.xml")
 
 
 def extract_instance_id(tree: ET.Element) -> str:
@@ -94,7 +94,7 @@ def extract_encrypted_signature(tree: ET.Element) -> str:
         return enc_signature
 
     raise InvalidSubmission(
-        "base64EncryptedElementSignature not found in submission.xml"
+        "base64EncryptedElementSignature element not found in submission.xml"
     )
 
 

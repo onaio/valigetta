@@ -299,7 +299,9 @@ def test_extract_encrypted_aes_key(fake_submission_tree, fake_aes_key):
     with pytest.raises(InvalidSubmission) as exc_info:
         extract_encrypted_aes_key(ET.fromstring(b"<data>hello</data>"))
 
-    assert str(exc_info.value) == "base64EncryptedKey not found in submission.xml"
+    assert (
+        str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
+    )
 
 
 def test_decrypt_file(fake_aes_key, encrypt_submission):
@@ -332,7 +334,7 @@ def test_extract_encrypted_signature(fake_submission_tree, fake_signature):
 
     assert (
         str(exc_info.value)
-        == "base64EncryptedElementSignature not found in submission.xml"
+        == "base64EncryptedElementSignature element not found in submission.xml"
     )
 
 
