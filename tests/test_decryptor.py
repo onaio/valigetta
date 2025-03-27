@@ -74,7 +74,7 @@ def fake_signature(
     def get_md5_hash_from_file(file: BytesIO) -> str:
         """Computes the MD5 hash of a file's content."""
         file.seek(0)
-        return hashlib.md5(file.read()).hexdigest()
+        return hashlib.md5(file.read()).hexdigest().zfill(32)
 
     def compute_digest(message: str) -> bytes:
         """Computes the MD5 digest of the given message (UTF-8 encoded)."""
