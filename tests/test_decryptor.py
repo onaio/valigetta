@@ -183,7 +183,6 @@ def test_decrypt_submission(
     fake_encrypted_files,
 ):
     """Decryption of an ODK submission."""
-
     aws_kms_client.key_id = aws_kms_key
 
     for dec_file_name, dec_file in decrypt_submission(
@@ -192,6 +191,48 @@ def test_decrypt_submission(
         encrypted_files=fake_encrypted_files,
     ):
         assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
+
+
+def test_corrupted_submission(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml,
+    fake_decrypted_submission,
+    fake_decrypted_media,
+    encrypt_submission,
+):
+    """Corrupt data is handled."""
+    aws_kms_client.key_id = aws_kms_key
+    # All have an initialization vector of 0
+    enc_files = [
+        (
+            "submission.xml.enc",
+            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
+        ),
+        (
+            "sunset.png.enc",
+            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 0),
+        ),
+        (
+            "forest.mp4.enc",
+            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 0),
+        ),
+    ]
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                aws_kms_client,
+                submission_xml=fake_submission_xml,
+                encrypted_files=enc_files,
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "Submission validation failed for instance ID "
+        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0. "
+        "Corrupted data or incorrect signature"
+    )
 
 
 def test_kms_decrypt_called_twice(
@@ -415,15 +456,65 @@ def test_is_submssion_valid(
     aws_kms_client,
     fake_submission_xml,
     aws_kms_key,
+    fake_aes_key,
 ):
     """Is valid check for decrypted submission contents works."""
     aws_kms_client.key_id = aws_kms_key
 
-    is_valid = is_submission_valid(
+    assert is_submission_valid(
         aws_kms_client,
         fake_submission_xml,
         fake_decrypted_submission,
         fake_decrypted_media,
     )
 
-    assert is_valid
+    # Missing media
+    assert not is_submission_valid(
+        aws_kms_client,
+        fake_submission_xml,
+        fake_decrypted_submission,
+    )
+
+    # Corrupted submission
+    assert not is_submission_valid(
+        aws_kms_client,
+        fake_submission_xml,
+        BytesIO(b"corrupted submission"),
+        fake_decrypted_media,
+    )
+
+    # Corrupted media
+    assert not is_submission_valid(
+        aws_kms_client,
+        fake_submission_xml,
+        fake_decrypted_submission,
+        {**fake_decrypted_media, "sunset.png": BytesIO(b"corrupted sunset")},
+    )
+
+    # Signature mismatch
+    _, fake_encrypted_key = fake_aes_key
+    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+    encrypted_signature_b64 = base64.b64encode(b"different-signature").decode("utf-8")
+    submission_xml = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+          submissionDate="2025-02-13T13:46:07.458944+00:00"
+          xmlns="http://opendatakit.org/submissions">
+        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
+        <meta xmlns="http://openrosa.org/xforms">
+            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
+        </meta>
+        <media>
+            <file>sunset.png.enc</file>
+            <file>forest.mp4.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+        <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
+    </data>
+    """.strip()
+    assert not is_submission_valid(
+        aws_kms_client,
+        fake_submission_xml,
+        BytesIO(submission_xml.encode("utf-8")),
+        fake_decrypted_media,
+    )

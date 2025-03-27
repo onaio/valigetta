@@ -9,11 +9,11 @@ import logging
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
-from typing import Iterable, Iterator, List, Tuple
+from typing import Iterable, Iterator, List, Optional, Tuple
 
 from Crypto.Cipher import AES
 
-from valigetta.exceptions import InvalidSubmission, MediaNotFound
+from valigetta.exceptions import InvalidSubmission
 from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
@@ -290,7 +290,7 @@ def decrypt_submission(
             try:
                 index = encrypted_media_names.index(enc_file_name) + 1
             except ValueError:
-                raise MediaNotFound(
+                raise InvalidSubmission(
                     f"Media {enc_file_name} not found in submission.xml"
                 )
 
@@ -327,9 +327,8 @@ def decrypt_submission(
     ):
         raise InvalidSubmission(
             (
-                "Decryption completed, but submission validation failed. "
-                "Possible causes: corrupted data, incorrect key, or "
-                "missing media files."
+                f"Submission validation failed for instance ID {instance_id}. "
+                "Corrupted data or incorrect signature"
             )
         )
 
@@ -402,7 +401,7 @@ def is_submission_valid(
     kms_client: KMSClient,
     submission_xml: BytesIO,
     decrypted_submission: BytesIO,
-    decrypted_media: dict[str, BytesIO],
+    decrypted_media: Optional[dict[str, BytesIO]] = None,
 ) -> bool:
     """Check if decryted submission is valid
 
@@ -417,6 +416,9 @@ def is_submission_valid(
     def compute_digest(message: str) -> bytes:
         """Computes the MD5 digest of the given message (UTF-8 encoded)."""
         return hashlib.md5(message.encode("utf-8")).digest()
+
+    if decrypted_media is None:
+        decrypted_media = {}
 
     try:
         decrypted_signature = _build_signature(
