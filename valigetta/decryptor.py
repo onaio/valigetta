@@ -236,13 +236,13 @@ def decrypt_submission(
                 )
 
         dec_file_name = _strip_enc_extension(enc_file_name)
-        dec_stream = BytesIO()
+        temp_buffer = BytesIO()
 
         for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
-            dec_stream.write(chunk)
+            temp_buffer.write(chunk)
 
-        dec_stream.seek(0)  # Reset stream position for reading
-        dec_files[dec_file_name] = dec_stream
+        temp_buffer.seek(0)  # Reset stream position for reading
+        dec_files[dec_file_name] = temp_buffer
 
     # Use a thread pool to decrypt files in parallel
     with ThreadPoolExecutor() as executor:
@@ -272,6 +272,7 @@ def decrypt_submission(
         )
 
     for dec_file_name, dec_file in dec_files.items():
+        dec_file.seek(0)
         yield dec_file_name, dec_file
 
 
