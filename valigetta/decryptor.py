@@ -4,6 +4,7 @@ Submission decryption
 
 import base64
 import hashlib
+import hmac
 import logging
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,7 +13,7 @@ from typing import Iterable, Iterator, List, Tuple
 
 from Crypto.Cipher import AES
 
-from valigetta.exceptions import InvalidSubmission
+from valigetta.exceptions import InvalidSubmission, MediaNotFound
 from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
@@ -239,6 +240,7 @@ def decrypt_file(
     :param index: Counter used for mutating the IV
     :return: Decrypted file in bytes
     """
+    file.seek(0)
     logger.debug("Generating IV for index %d", index)
     iv = _get_submission_iv(instance_id, aes_key, index)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
@@ -265,31 +267,79 @@ def extract_n_decrypt_aes_key(kms_client: KMSClient, submission_xml: BytesIO) ->
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
-    encrypted_files: Iterable[Tuple[int, BytesIO]],
-) -> Iterator[Tuple[int, bytes]]:
+    encrypted_files: Iterable[Tuple[str, BytesIO]],
+) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
     :param submission_xml: Submission XML file
-    :param encrypted_files: An iterable yielding encrypted file contents
-    :return: A generator yielding decrypted data chunks
+    :param encrypted_files: An iterable yielding encrypted files
+    :return: A generator yielding decrypted files
     """
+    decrypted_files: dict[str, BytesIO] = {}
     aes_key = extract_n_decrypt_aes_key(kms_client, submission_xml)
     instance_id = extract_instance_id(submission_xml)
+    encrypted_submission_name = extract_encrypted_submission_file_name(submission_xml)
+    encrypted_media_names = extract_media_file_names(submission_xml)
 
+    def decrypt_task(enc_file_name: str, enc_file: BytesIO):
+        """Helper function to decrypt a single file and store it in BytesIO."""
+        if enc_file_name == encrypted_submission_name:
+            index = 0  # Submission files use index 0
+        else:
+            try:
+                index = encrypted_media_names.index(enc_file_name) + 1
+            except ValueError:
+                raise MediaNotFound(
+                    f"Media {enc_file_name} not found in submission.xml"
+                )
+
+        dec_file_name = _strip_enc_extension(enc_file_name)
+        decrypted_stream = BytesIO()
+
+        for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
+            decrypted_stream.write(chunk)
+
+        decrypted_stream.seek(0)  # Reset stream position for reading
+        decrypted_files[dec_file_name] = decrypted_stream
+
+    # Use a thread pool to decrypt files in parallel
     with ThreadPoolExecutor() as executor:
-        futures = {
-            executor.submit(decrypt_file, file, aes_key, instance_id, index): index
-            for index, file in encrypted_files
-        }
+        futures = [
+            executor.submit(decrypt_task, name, file) for name, file in encrypted_files
+        ]
 
+        # Ensure all decryption tasks complete
         for future in as_completed(futures):
-            index = futures[future]
+            future.result()
 
-            for chunk in future.result():  # Process each chunk as it's available
-                logger.debug("Decrypted chunk for index %d", index)
+    original_submission_name = _strip_enc_extension(encrypted_submission_name)
+    decrypted_submission = decrypted_files[original_submission_name]
+    decrypted_media = {
+        k: v for k, v in decrypted_files.items() if k != original_submission_name
+    }
 
-                yield index, chunk
+    if not is_submission_valid(
+        kms_client=kms_client,
+        submission_xml=submission_xml,
+        decrypted_submission=decrypted_submission,
+        decrypted_media=decrypted_media,
+    ):
+        raise InvalidSubmission(
+            (
+                "Decryption completed, but submission validation failed. "
+                "Possible causes: corrupted data, incorrect key, or "
+                "missing media files."
+            )
+        )
+
+    for decrypted_file_name, decrypted_file in decrypted_files.items():
+        yield decrypted_file_name, decrypted_file
+
+
+def _strip_enc_extension(encrypted_file_name: str) -> str:
+    """Strip .enc extension from encrypted file name."""
+    return encrypted_file_name.rsplit(".", 1)[0]
 
 
 def _build_signature(
@@ -324,10 +374,6 @@ def _build_signature(
 
         return md5.hexdigest().zfill(32)  # Ensure 32-character padding
 
-    def strip_enc_extension(encrypted_file_name: str) -> str:
-        """Strip .enc extension from encrypted file name."""
-        return encrypted_file_name.rsplit(".", 1)[0]
-
     signature_parts = []
     signature_parts.append(extract_form_id(submission_xml))
     signature_parts.append(extract_version(submission_xml))
@@ -335,7 +381,7 @@ def _build_signature(
     signature_parts.append(extract_instance_id(submission_xml))
 
     for encrypted_media_name in extract_media_file_names(submission_xml):
-        original_media_name = strip_enc_extension(encrypted_media_name)
+        original_media_name = _strip_enc_extension(encrypted_media_name)
 
         if original_media_name in decrypted_media:
             original_media_file = decrypted_media[original_media_name]
@@ -343,7 +389,7 @@ def _build_signature(
             signature_parts.append(f"{original_media_name}::{original_media_md5_hash}")
 
     encrypted_submission_name = extract_encrypted_submission_file_name(submission_xml)
-    original_submission_name = strip_enc_extension(encrypted_submission_name)
+    original_submission_name = _strip_enc_extension(encrypted_submission_name)
     original_submission_md5_hash = get_md5_hash_from_file(decrypted_submission)
     signature_parts.append(
         f"{original_submission_name}::{original_submission_md5_hash}"
@@ -372,12 +418,20 @@ def is_submission_valid(
         """Computes the MD5 digest of the given message (UTF-8 encoded)."""
         return hashlib.md5(message.encode("utf-8")).digest()
 
-    decrypted_signature = _build_signature(
-        submission_xml, decrypted_submission, decrypted_media
-    )
-    decrypted_signature_md5_digest = compute_digest(decrypted_signature)
-    encrypted_b64_signature = extract_encrypted_signature(submission_xml)
-    encrypted_signature = base64.b64decode(encrypted_b64_signature)
-    expected_signature = kms_client.decrypt(encrypted_signature)
+    try:
+        decrypted_signature = _build_signature(
+            submission_xml, decrypted_submission, decrypted_media
+        )
+        computed_signature_digest = compute_digest(decrypted_signature)
+        encrypted_b64_signature = extract_encrypted_signature(submission_xml)
+        encrypted_signature = base64.b64decode(encrypted_b64_signature)
+        expected_signature_digest = kms_client.decrypt(encrypted_signature)
 
-    return expected_signature == decrypted_signature_md5_digest
+        logger.debug("Comparing submission signatures")
+
+        return hmac.compare_digest(expected_signature_digest, computed_signature_digest)
+
+    except Exception as exc:
+        logger.error(f"Error validating submission: {exc}")
+
+        raise InvalidSubmission(f"Failed to validate submission: {exc}")

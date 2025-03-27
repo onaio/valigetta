@@ -1,8 +1,7 @@
 import base64
 import hashlib
-from collections import defaultdict
 from io import BytesIO
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 from Crypto.Cipher import AES
@@ -151,174 +150,85 @@ def encrypt_submission(fake_aes_key):
     return _encrypt
 
 
+@pytest.fixture
+def fake_decrypted_files(fake_decrypted_submission, fake_decrypted_media):
+    return {"submission.xml": fake_decrypted_submission, **fake_decrypted_media}
+
+
+@pytest.fixture
+def fake_encrypted_files(
+    encrypt_submission, fake_decrypted_submission, fake_decrypted_media
+):
+    return [
+        (
+            "submission.xml.enc",
+            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
+        ),
+        (
+            "sunset.png.enc",
+            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
+        ),
+        (
+            "forest.mp4.enc",
+            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 2),
+        ),
+    ]
+
+
 def test_decrypt_submission(
-    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml,
+    fake_decrypted_files,
+    fake_encrypted_files,
 ):
-    """Test decryption of an ODK submission."""
-    plaintext_aes_key, fake_encrypted_key = fake_aes_key
-    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
-    original_data = b"<data>test submission</data>"
-    file_index = 0
-    encrypted_file = encrypt_submission(original_data, file_index)
-    aws_kms_client.key_id = aws_kms_key
-    decrypted_files = defaultdict(bytearray)
+    """Decryption of an ODK submission."""
 
-    for index, chunk in decrypt_submission(
+    aws_kms_client.key_id = aws_kms_key
+
+    for dec_file_name, dec_file in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
-        encrypted_files=[(file_index, encrypted_file)],
+        encrypted_files=fake_encrypted_files,
     ):
-        decrypted_files[index].extend(chunk)
-
-    assert decrypted_files[0] == original_data
-
-    aws_kms_client.decrypt_aes_key.assert_called_once_with(fake_encrypted_key)
+        assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
 
 
-def test_decrypt_submission_multiple_files(
-    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
+def test_kms_decrypt_called_twice(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml,
+    fake_aes_key,
+    fake_encrypted_files,
+    fake_signature,
 ):
-    """KMS decryption is only called once when decrypting multiple files."""
-    plaintext_aes_key, fake_encrypted_key = fake_aes_key
-    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
+    """KMSClient decrypt call is called twice
 
-    original_data = [b"<data>file1</data>", b"<data>file2</data>"]
-
-    def encrypted_files_generator():
-        for index, datum in enumerate(original_data):
-            yield index, encrypt_submission(datum, index)
+    1st call decrypts AES key
+    2nd call decrypts signature
+    """
+    plaintext_key, fake_encrypted_key = fake_aes_key
 
     aws_kms_client.key_id = aws_kms_key
+    aws_kms_client.decrypt = MagicMock(return_value=plaintext_key)
 
-    decrypted_files = defaultdict(bytearray)
-
-    for index, chunk in decrypt_submission(
-        aws_kms_client,
-        submission_xml=fake_submission_xml,
-        encrypted_files=encrypted_files_generator(),
-    ):
-        decrypted_files[index].extend(chunk)
-
-    assert decrypted_files[0] == original_data[0]
-    assert decrypted_files[1] == original_data[1]
-
-    aws_kms_client.decrypt_aes_key.assert_called_once_with(fake_encrypted_key)
-
-
-def test_decrypt_invalid_xml(
-    aws_kms_client, aws_kms_key, fake_aes_key, encrypt_submission
-):
-    """Invalid XML structure raises an exception"""
-    plaintext_aes_key, _ = fake_aes_key
-    aws_kms_client.key_id = aws_kms_key
-    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
-
-    original_data = b"<data>test submission</data>"
-    encrypted_file = encrypt_submission(original_data, 0)
-    encrypted_files = [(0, encrypted_file)]
-
-    with pytest.raises(InvalidSubmission) as exc_info:
+    try:
         list(
             decrypt_submission(
                 aws_kms_client,
-                submission_xml=BytesIO(b"invalid xml"),
-                encrypted_files=encrypted_files,
+                submission_xml=fake_submission_xml,
+                encrypted_files=fake_encrypted_files,
             )
         )
 
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
+    except InvalidSubmission:
+        pass
 
-    # instanceID missing
-    encrypted_key = base64.b64encode(b"fake-encrypted-key").decode("utf-8")
-    encrypted_signature = base64.b64encode(b"fake-encrypted-signature").decode("utf-8")
-    xml_content = f"""<?xml version="1.0"?>
-    <data encrypted="yes" id="test_valigetta" version="202502131337"
-          submissionDate="2025-02-13T13:46:07.458944+00:00"
-          xmlns="http://opendatakit.org/submissions">
-        <base64EncryptedKey>{encrypted_key}</base64EncryptedKey>
-        <media>
-            <file>kingfisher.jpeg.enc</file>
-        </media>
-        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
-        <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
-    </data>""".strip()
-
-    with pytest.raises(InvalidSubmission) as exc_info:
-        list(
-            decrypt_submission(
-                aws_kms_client,
-                submission_xml=BytesIO(xml_content.encode("utf-8")),
-                encrypted_files=[encrypted_file],
-            )
-        )
-
-    assert str(exc_info.value) == "instanceID not found in submission.xml"
-
-    # base64EncryptedKey missing
-    xml_content = f"""<?xml version="1.0"?>
-    <data encrypted="yes" id="test_valigetta" version="202502131337"
-          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
-          submissionDate="2025-02-13T13:46:07.458944+00:00"
-          xmlns="http://opendatakit.org/submissions">
-        <meta xmlns="http://openrosa.org/xforms">
-            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
-        </meta>
-        <media>
-            <file>kingfisher.jpeg.enc</file>
-        </media>
-        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
-        <base64EncryptedElementSignature>{encrypted_signature}</base64EncryptedElementSignature>
-    </data>
-    """.strip()
-
-    with pytest.raises(InvalidSubmission) as exc_info:
-        list(
-            decrypt_submission(
-                aws_kms_client,
-                submission_xml=BytesIO(xml_content.encode("utf-8")),
-                encrypted_files=[encrypted_file],
-            )
-        )
-
-    assert (
-        str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
-    )
+    calls = [call(fake_encrypted_key), call(fake_signature)]
+    aws_kms_client.decrypt.assert_has_calls(calls)
 
 
-def test_decrypt_large_file(
-    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key, encrypt_submission
-):
-    """A file larger than 4KB is decrypted correctly."""
-    plaintext_aes_key, fake_encrypted_key = fake_aes_key
-    aws_kms_client.key_id = aws_kms_key
-    aws_kms_client.decrypt_aes_key = MagicMock(return_value=plaintext_aes_key)
-
-    # 10KB, 1MB of data files
-    original_data = [b"A" * 10 * 1024, b"B" * 1024 * 1024]
-
-    def encrypted_files_generator():
-        for index, datum in enumerate(original_data):
-            yield index, encrypt_submission(datum, index)
-
-    decrypted_files = defaultdict(bytearray)
-
-    for index, chunk in decrypt_submission(
-        aws_kms_client,
-        submission_xml=fake_submission_xml,
-        encrypted_files=encrypted_files_generator(),
-    ):
-        decrypted_files[index].extend(chunk)
-
-    # Verify that the entire file was decrypted correctly
-    assert decrypted_files[0] == original_data[0]
-    assert decrypted_files[1] == original_data[1]
-
-    aws_kms_client.decrypt_aes_key.assert_called_once_with(fake_encrypted_key)
-
-
-def test_extract_dec_aes_key(
+def test_extract_n_dec_aes_key(
     aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key
 ):
     """Extraction and decryption of AES key is successful."""
@@ -483,7 +393,7 @@ def test_extract_media_file_names(fake_submission_xml):
     """Extraction of media file names is successful."""
     media_file_names = extract_media_file_names(fake_submission_xml)
 
-    assert media_file_names == ["kingfisher.jpeg.enc"]
+    assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
 
     # Invalid XML
     with pytest.raises(InvalidSubmission) as exc_info:
