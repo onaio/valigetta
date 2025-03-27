@@ -305,16 +305,15 @@ def _build_signature(
     for dec_file_name, dec_file in dec_files:
         if dec_file_name == dec_submission_name:
             # Submission file
-            dec_submission_md5_hash = get_md5_hash_from_file(dec_file)
-            dec_submission_parts.append(
-                f"{dec_submission_name}::{dec_submission_md5_hash}"
-            )
+            dec_file_md5_hash = get_md5_hash_from_file(dec_file)
+            dec_submission_parts.append(f"{dec_submission_name}::{dec_file_md5_hash}")
 
         else:
-            # Media file
+            # Media file. We concatenate media hashes in the same order
+            # the files appear in submission.xml
             index = dec_media_parts.index(dec_file_name)
-            dec_media_md5_hash = get_md5_hash_from_file(dec_file)
-            dec_media_parts[index] = f"{dec_file_name}::{dec_media_md5_hash}"
+            dec_file_md5_hash = get_md5_hash_from_file(dec_file)
+            dec_media_parts[index] = f"{dec_file_name}::{dec_file_md5_hash}"
 
     signature_parts.extend(dec_media_parts)
     signature_parts.extend(dec_submission_parts)
