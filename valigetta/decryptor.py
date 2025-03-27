@@ -18,191 +18,139 @@ from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
 
+NAMESPACE = {
+    "n": "http://opendatakit.org/submissions",
+    "meta": "http://openrosa.org/xforms",
+}
 
-def extract_encrypted_aes_key(submission_xml: BytesIO) -> str:
+
+def _parse_submission_xml(submission_xml: BytesIO) -> ET.Element:
+    """Parses the XML file."""
+    try:
+        submission_xml.seek(0)
+        return ET.fromstring(submission_xml.read())
+    except ET.ParseError as exc:
+        raise InvalidSubmission(f"Invalid XML structure: {exc}")
+
+
+def _extract_xml_value(
+    tree: ET.Element, xpath: str, namespace: dict = NAMESPACE
+) -> Optional[str]:
+    """Generic function to extract an XML element's text value."""
+    element = tree.find(xpath, namespace)
+
+    if element is None or not element.text:
+        return None
+
+    return element.text.strip()
+
+
+def extract_encrypted_aes_key(tree: ET.Element) -> str:
     """Extract submission's encrypted AES key.
 
-    :param submission_xml: Submission XML file
-    :return: value from the tag base64EncryptedKey
+    :param tree: Parsed XML tree
+    :return: Value from the tag base64EncryptedKey
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        namespace = {"n": "http://opendatakit.org/submissions"}
-        enc_key_elem = tree.find("n:base64EncryptedKey", namespace)
+    enc_aes_key = _extract_xml_value(tree, "n:base64EncryptedKey")
 
-        if enc_key_elem is None or not enc_key_elem.text:
-            raise InvalidSubmission(
-                "base64EncryptedKey element not found in submission.xml"
-            )
+    if enc_aes_key:
+        return enc_aes_key
 
-        return enc_key_elem.text.strip().replace("\n", "")
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
-
-    except Exception as exc:
-        logger.error(f"Error extracting base64EncryptedKey: {exc}")
-
-        raise
+    raise InvalidSubmission("base64EncryptedKey not found in submission.xml")
 
 
-def extract_instance_id(submission_xml: BytesIO) -> str:
+def extract_instance_id(tree: ET.Element) -> str:
     """Extract submissions's instanceID.
 
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
+    :return: Value of the root node's "instanceID"
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        instance_id = tree.attrib.get("instanceID")
 
-        if instance_id is None:
-            meta_elem = tree.find(".//{http://openrosa.org/xforms}meta")
+    instance_id = tree.attrib.get("instanceID")
 
-            if meta_elem is not None:
-                instance_id_elem = meta_elem.find(
-                    "{http://openrosa.org/xforms}instanceID"
-                )
-                if instance_id_elem is not None and instance_id_elem.text:
-                    instance_id = instance_id_elem.text.strip().replace("\n", "")
-
-        if not instance_id:
-            raise InvalidSubmission("instanceID not found in submission.xml")
-
+    if instance_id:
         return instance_id
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
 
-    except Exception as exc:
-        logging.error(f"Error extracting instanceID: {exc}")
+    # Fallback to searching inside meta tag
+    meta_elem = tree.find(".//{http://openrosa.org/xforms}meta")
 
-        raise
+    if meta_elem is not None:
+        instance_id_elem = meta_elem.find("{http://openrosa.org/xforms}instanceID")
+        if instance_id_elem is not None and instance_id_elem.text:
+            return instance_id_elem.text.strip()
+
+    raise InvalidSubmission("instanceID not found in submission.xml")
 
 
-def extract_encrypted_signature(submission_xml: BytesIO) -> str:
+def extract_encrypted_signature(tree: ET.Element) -> str:
     """Extract submission's encrypted signature.
 
-    :param submission_xml: Submission XML file
-    :return: value from the tag base64EncryptedElementSignature
+    :param tree: Parsed XML tree
+    :return: Value from the tag base64EncryptedElementSignature
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        namespace = {"n": "http://opendatakit.org/submissions"}
-        enc_sig_elem = tree.find("n:base64EncryptedElementSignature", namespace)
+    enc_signature = _extract_xml_value(tree, "n:base64EncryptedElementSignature")
 
-        if enc_sig_elem is None or not enc_sig_elem.text:
-            raise InvalidSubmission(
-                "base64EncryptedElementSignature element not found in submission.xml"
-            )
+    if enc_signature:
+        return enc_signature
 
-        return enc_sig_elem.text.strip().replace("\n", "")
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
-
-    except Exception as exc:
-        logger.error(f"Error extracting base64EncryptedElementSignature: {exc}")
-
-        raise
+    raise InvalidSubmission(
+        "base64EncryptedElementSignature not found in submission.xml"
+    )
 
 
-def extract_encrypted_submission_file_name(submission_xml: BytesIO) -> str:
+def extract_encrypted_submission_file_name(tree: ET.Element) -> str:
     """Extract the file name of the encrypted submission file.
 
-    :param submission_xml: Submission XML file
-    :return: value from the tag encryptedXmlFile
+    :param tree: Parsed XML tree
+    :return: Value from the tag encryptedXmlFile
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        namespace = {"n": "http://opendatakit.org/submissions"}
-        enc_xml_file_elem = tree.find("n:encryptedXmlFile", namespace)
+    enc_submisson_name = _extract_xml_value(tree, "n:encryptedXmlFile")
 
-        if enc_xml_file_elem is None or not enc_xml_file_elem.text:
-            raise InvalidSubmission(
-                "encryptedXmlFile element not found in submission.xml"
-            )
+    if enc_submisson_name:
+        return enc_submisson_name
 
-        return enc_xml_file_elem.text.strip().replace("\n", "")
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
-
-    except Exception as exc:
-        logger.error(f"Error extracting encryptedXmlFile: {exc}")
-
-        raise
+    raise InvalidSubmission("encryptedXmlFile element not found in submission.xml")
 
 
-def extract_form_id(submission_xml: BytesIO) -> str:
+def extract_form_id(tree: ET.Element) -> str:
     """Extract the submission's form ID.
 
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
     :return: Value of the root node's "id"
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        form_id = tree.attrib.get("id")
+    form_id = tree.attrib.get("id")
 
-        if not form_id:
-            raise InvalidSubmission("form id not found in submission.xml")
-
+    if form_id:
         return form_id
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
 
-    except Exception as exc:
-        logging.error(f"Error extracting form id: {exc}")
-
-        raise
+    raise InvalidSubmission("Form ID not found in submission.xml")
 
 
-def extract_version(submission_xml: BytesIO) -> str:
+def extract_version(tree: ET.Element) -> str:
     """Extra the submission's version.
 
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
     :return: Value of the root node's "version"
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        version = tree.attrib.get("version")
+    version = tree.attrib.get("version")
 
-        if not version:
-            raise InvalidSubmission("version not found in submission.xml")
-
+    if version:
         return version
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
 
-    except Exception as exc:
-        logging.error(f"Error extracting version: {exc}")
-
-        raise
+    raise InvalidSubmission("version not found in submission.xml")
 
 
-def extract_media_file_names(submission_xml: BytesIO) -> List[str]:
-    """Extract all the submission's media file names.
+def extract_encrypted_media_file_names(tree: ET.Element) -> List[str]:
+    """Extract all the encrypted submission's media file names.
 
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
     :return: List of media file names
     """
-    try:
-        submission_xml.seek(0)  # Reset file pointer
-        tree = ET.fromstring(submission_xml.read())
-        namespace = {"n": "http://opendatakit.org/submissions"}
-
-        media_files = tree.findall("n:media/n:file", namespace)
-        file_names = [
-            file_elem.text.strip() for file_elem in media_files if file_elem.text
-        ]
-
-        return file_names
-    except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
-    except Exception as exc:
-        logging.error(f"Error extracting media file names: {exc}")
-        raise
+    return [
+        elem.text.strip()
+        for elem in tree.findall("n:media/n:file", NAMESPACE)
+        if elem.text
+    ]
 
 
 def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
@@ -249,21 +197,6 @@ def decrypt_file(
         yield cipher_aes.decrypt(chunk)
 
 
-def extract_n_decrypt_aes_key(kms_client: KMSClient, submission_xml: BytesIO) -> bytes:
-    """Extract encrypted AES key from submission XML and decrypt it
-
-    :param kms_client: KMSClient instance
-    :param submission_xml: Submission XML file
-    :return Decrypted AES key
-    """
-    logger.debug("Extracting encrypted AES key from submission XML.")
-    encrypted_aes_key_b64 = extract_encrypted_aes_key(submission_xml)
-    encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
-
-    logger.debug("Decrypting AES key using AWS KMS.")
-    return kms_client.decrypt(encrypted_aes_key)
-
-
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
@@ -277,10 +210,18 @@ def decrypt_submission(
     :return: A generator yielding decrypted files
     """
     decrypted_files: dict[str, BytesIO] = {}
-    aes_key = extract_n_decrypt_aes_key(kms_client, submission_xml)
-    instance_id = extract_instance_id(submission_xml)
-    encrypted_submission_name = extract_encrypted_submission_file_name(submission_xml)
-    encrypted_media_names = extract_media_file_names(submission_xml)
+    tree = _parse_submission_xml(submission_xml)
+
+    logger.debug("Extracting encrypted AES key from submission XML.")
+    encrypted_aes_key_b64 = extract_encrypted_aes_key(tree)
+    encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
+
+    logger.debug("Decrypting AES key using AWS KMS.")
+    aes_key = kms_client.decrypt(encrypted_aes_key)
+
+    instance_id = extract_instance_id(tree)
+    encrypted_submission_name = extract_encrypted_submission_file_name(tree)
+    encrypted_media_names = extract_encrypted_media_file_names(tree)
 
     def decrypt_task(enc_file_name: str, enc_file: BytesIO):
         """Helper function to decrypt a single file and store it in BytesIO."""
@@ -321,7 +262,7 @@ def decrypt_submission(
 
     if not is_submission_valid(
         kms_client=kms_client,
-        submission_xml=submission_xml,
+        tree=tree,
         decrypted_submission=decrypted_submission,
         decrypted_media=decrypted_media,
     ):
@@ -342,7 +283,7 @@ def _strip_enc_extension(encrypted_file_name: str) -> str:
 
 
 def _build_signature(
-    submission_xml: BytesIO,
+    tree: ET.Element,
     decrypted_submission: BytesIO,
     decrypted_media: dict[str, BytesIO],
 ) -> str:
@@ -356,7 +297,7 @@ def _build_signature(
     - Media file names with their MD5 hashes
     - Submission file name with its MD5 hash
 
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
     :param decrypted_submission: Decrypted submission file
     :param decrypted_media: A dictionary of original media file names
                             mapped to the decrypted file
@@ -374,12 +315,12 @@ def _build_signature(
         return md5.hexdigest().zfill(32)  # Ensure 32-character padding
 
     signature_parts = []
-    signature_parts.append(extract_form_id(submission_xml))
-    signature_parts.append(extract_version(submission_xml))
-    signature_parts.append(extract_encrypted_aes_key(submission_xml))
-    signature_parts.append(extract_instance_id(submission_xml))
+    signature_parts.append(extract_form_id(tree))
+    signature_parts.append(extract_version(tree))
+    signature_parts.append(extract_encrypted_aes_key(tree))
+    signature_parts.append(extract_instance_id(tree))
 
-    for encrypted_media_name in extract_media_file_names(submission_xml):
+    for encrypted_media_name in extract_encrypted_media_file_names(tree):
         original_media_name = _strip_enc_extension(encrypted_media_name)
 
         if original_media_name in decrypted_media:
@@ -387,7 +328,7 @@ def _build_signature(
             original_media_md5_hash = get_md5_hash_from_file(original_media_file)
             signature_parts.append(f"{original_media_name}::{original_media_md5_hash}")
 
-    encrypted_submission_name = extract_encrypted_submission_file_name(submission_xml)
+    encrypted_submission_name = extract_encrypted_submission_file_name(tree)
     original_submission_name = _strip_enc_extension(encrypted_submission_name)
     original_submission_md5_hash = get_md5_hash_from_file(decrypted_submission)
     signature_parts.append(
@@ -399,14 +340,14 @@ def _build_signature(
 
 def is_submission_valid(
     kms_client: KMSClient,
-    submission_xml: BytesIO,
+    tree: ET.Element,
     decrypted_submission: BytesIO,
     decrypted_media: Optional[dict[str, BytesIO]] = None,
 ) -> bool:
     """Check if decryted submission is valid
 
     :param kms_client: KMSClient instance
-    :param submission_xml: Submission XML file
+    :param tree: Parsed XML tree
     :param decrypted_submission: Decrypted submission file
     :param decrypted_media: A dictionary of original media file names
                             mapped to the decrypted file
@@ -422,10 +363,10 @@ def is_submission_valid(
 
     try:
         decrypted_signature = _build_signature(
-            submission_xml, decrypted_submission, decrypted_media
+            tree, decrypted_submission, decrypted_media
         )
         computed_signature_digest = compute_digest(decrypted_signature)
-        encrypted_b64_signature = extract_encrypted_signature(submission_xml)
+        encrypted_b64_signature = extract_encrypted_signature(tree)
         encrypted_signature = base64.b64decode(encrypted_b64_signature)
         expected_signature_digest = kms_client.decrypt(encrypted_signature)
 

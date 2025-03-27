@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from unittest.mock import MagicMock, call
 
@@ -11,12 +12,11 @@ from valigetta.decryptor import (
     decrypt_file,
     decrypt_submission,
     extract_encrypted_aes_key,
+    extract_encrypted_media_file_names,
     extract_encrypted_signature,
     extract_encrypted_submission_file_name,
     extract_form_id,
     extract_instance_id,
-    extract_media_file_names,
-    extract_n_decrypt_aes_key,
     extract_version,
     is_submission_valid,
 )
@@ -156,6 +156,12 @@ def fake_decrypted_files(fake_decrypted_submission, fake_decrypted_media):
 
 
 @pytest.fixture
+def fake_submission_tree(fake_submission_xml):
+    fake_submission_xml.seek(0)
+    return ET.fromstring(fake_submission_xml.read())
+
+
+@pytest.fixture
 def fake_encrypted_files(
     encrypt_submission, fake_decrypted_submission, fake_decrypted_media
 ):
@@ -269,60 +275,31 @@ def test_kms_decrypt_called_twice(
     aws_kms_client.decrypt.assert_has_calls(calls)
 
 
-def test_extract_n_dec_aes_key(
-    aws_kms_client, aws_kms_key, fake_submission_xml, fake_aes_key
-):
-    """Extraction and decryption of AES key is successful."""
-    aws_kms_client.key_id = aws_kms_key
-    plaintext_aes_key, _ = fake_aes_key
-    aes_key = extract_n_decrypt_aes_key(aws_kms_client, fake_submission_xml)
-
-    assert aes_key == plaintext_aes_key
-
-
-def test_extract_instance_id(fake_submission_xml):
+def test_extract_instance_id(fake_submission_tree):
     """Extract of instanceID from submission XML is successful."""
-    instance_id = extract_instance_id(fake_submission_xml)
+    instance_id = extract_instance_id(fake_submission_tree)
 
     assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_instance_id(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing instanceID
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_instance_id(BytesIO(b"<data>hello</data>"))
+        extract_instance_id(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "instanceID not found in submission.xml"
 
 
-def test_extract_encrypted_aes_key(fake_submission_xml, fake_aes_key):
+def test_extract_encrypted_aes_key(fake_submission_tree, fake_aes_key):
     """Extraction of encrypted AES key from submission XML is successful."""
     _, fake_encrypted_key = fake_aes_key
-    enc_aes_key = extract_encrypted_aes_key(fake_submission_xml)
+    enc_aes_key = extract_encrypted_aes_key(fake_submission_tree)
 
     assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_aes_key(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing encrypted AES key
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_aes_key(BytesIO(b"<data>hello</data>"))
+        extract_encrypted_aes_key(ET.fromstring(b"<data>hello</data>"))
 
-    assert (
-        str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
-    )
+    assert str(exc_info.value) == "base64EncryptedKey not found in submission.xml"
 
 
 def test_decrypt_file(fake_aes_key, encrypt_submission):
@@ -343,109 +320,71 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     assert decrypted_file == original_data
 
 
-def test_extract_encrypted_signature(fake_submission_xml, fake_signature):
+def test_extract_encrypted_signature(fake_submission_tree, fake_signature):
     """Extraction of encrypted signature is successful."""
-    enc_signature = extract_encrypted_signature(fake_submission_xml)
+    enc_signature = extract_encrypted_signature(fake_submission_tree)
 
     assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_signature(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing signature
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_signature(BytesIO(b"<data>hello</data>"))
+        extract_encrypted_signature(ET.fromstring(b"<data>hello</data>"))
 
     assert (
         str(exc_info.value)
-        == "base64EncryptedElementSignature element not found in submission.xml"
+        == "base64EncryptedElementSignature not found in submission.xml"
     )
 
 
-def test_extract_encrypted_xml_file_name(fake_submission_xml):
+def test_extract_encrypted_xml_file_name(fake_submission_tree):
     """Extraction of encrypted xml file name is successful."""
-    enc_xml_file_name = extract_encrypted_submission_file_name(fake_submission_xml)
+    enc_xml_file_name = extract_encrypted_submission_file_name(fake_submission_tree)
 
     assert enc_xml_file_name == "submission.xml.enc"
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_submission_file_name(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing xml file name
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_encrypted_submission_file_name(BytesIO(b"<data>hello</data>"))
+        extract_encrypted_submission_file_name(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "encryptedXmlFile element not found in submission.xml"
 
 
-def test_extract_form_id(fake_submission_xml):
+def test_extract_form_id(fake_submission_tree):
     """Extraction of submission's form id is successful."""
-    form_id = extract_form_id(fake_submission_xml)
+    form_id = extract_form_id(fake_submission_tree)
 
     assert form_id == "test_valigetta"
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_form_id(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing form id
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_form_id(BytesIO(b"<data>hello</data>"))
+        extract_form_id(ET.fromstring(b"<data>hello</data>"))
 
-    assert str(exc_info.value) == "form id not found in submission.xml"
+    assert str(exc_info.value) == "Form ID not found in submission.xml"
 
 
-def test_extract_version(fake_submission_xml):
+def test_extract_version(fake_submission_tree):
     """Extraction of submission's version is successful."""
-    version = extract_version(fake_submission_xml)
+    version = extract_version(fake_submission_tree)
 
     assert version == "202502131337"
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_version(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing version
     with pytest.raises(InvalidSubmission) as exc_info:
-        extract_version(BytesIO(b"<data>hello</data>"))
+        extract_version(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "version not found in submission.xml"
 
 
-def test_extract_media_file_names(fake_submission_xml):
+def test_extract_media_file_names(fake_submission_tree):
     """Extraction of media file names is successful."""
-    media_file_names = extract_media_file_names(fake_submission_xml)
+    media_file_names = extract_encrypted_media_file_names(fake_submission_tree)
 
     assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
 
-    # Invalid XML
-    with pytest.raises(InvalidSubmission) as exc_info:
-        extract_media_file_names(BytesIO(b"invalid xml"))
-
-    assert (
-        str(exc_info.value) == "Invalid XML structure: syntax error: line 1, column 0"
-    )
-
     # Missing media
-    media_file_names = extract_media_file_names(BytesIO(b"<data>hello</data>"))
+    media_file_names = extract_encrypted_media_file_names(
+        ET.fromstring(b"<data>hello</data>")
+    )
 
     assert len(media_file_names) == 0
 
@@ -454,7 +393,7 @@ def test_is_submssion_valid(
     fake_decrypted_media,
     fake_decrypted_submission,
     aws_kms_client,
-    fake_submission_xml,
+    fake_submission_tree,
     aws_kms_key,
     fake_aes_key,
 ):
@@ -463,7 +402,7 @@ def test_is_submssion_valid(
 
     assert is_submission_valid(
         aws_kms_client,
-        fake_submission_xml,
+        fake_submission_tree,
         fake_decrypted_submission,
         fake_decrypted_media,
     )
@@ -471,14 +410,14 @@ def test_is_submssion_valid(
     # Missing media
     assert not is_submission_valid(
         aws_kms_client,
-        fake_submission_xml,
+        fake_submission_tree,
         fake_decrypted_submission,
     )
 
     # Corrupted submission
     assert not is_submission_valid(
         aws_kms_client,
-        fake_submission_xml,
+        fake_submission_tree,
         BytesIO(b"corrupted submission"),
         fake_decrypted_media,
     )
@@ -486,7 +425,7 @@ def test_is_submssion_valid(
     # Corrupted media
     assert not is_submission_valid(
         aws_kms_client,
-        fake_submission_xml,
+        fake_submission_tree,
         fake_decrypted_submission,
         {**fake_decrypted_media, "sunset.png": BytesIO(b"corrupted sunset")},
     )
@@ -514,7 +453,7 @@ def test_is_submssion_valid(
     """.strip()
     assert not is_submission_valid(
         aws_kms_client,
-        fake_submission_xml,
+        fake_submission_tree,
         BytesIO(submission_xml.encode("utf-8")),
         fake_decrypted_media,
     )
