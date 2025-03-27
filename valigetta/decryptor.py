@@ -256,13 +256,18 @@ def decrypt_submission(
 
     dec_submission_name = _strip_enc_extension(enc_submission_name)
     dec_submission = dec_files[dec_submission_name]
-    dec_media = {k: v for k, v in dec_files.items() if k != dec_submission_name}
+
+    def dec_media():
+        for enc_media_name in enc_media_names:
+            dec_file_name = _strip_enc_extension(enc_media_name)
+
+            yield dec_file_name, dec_files[dec_file_name]
 
     if not is_submission_valid(
         kms_client=kms_client,
         tree=tree,
         dec_submission=dec_submission,
-        dec_media=dec_media,
+        dec_media=dec_media(),
     ):
         raise InvalidSubmission(
             (
@@ -272,7 +277,6 @@ def decrypt_submission(
         )
 
     for dec_file_name, dec_file in dec_files.items():
-        dec_file.seek(0)
         yield dec_file_name, dec_file
 
 
@@ -284,7 +288,7 @@ def _strip_enc_extension(encrypted_file_name: str) -> str:
 def _build_signature(
     tree: ET.Element,
     dec_submission: BytesIO,
-    dec_media: dict[str, BytesIO],
+    dec_media: Iterable[Tuple[str, BytesIO]],
 ) -> str:
     """Build a signature from a decrypted submission's content
 
@@ -298,8 +302,8 @@ def _build_signature(
 
     :param tree: Parsed XML tree
     :param dec_submission: Decrypted submission file
-    :param dec_media: A dictionary of original media file names
-                            mapped to the decrypted file
+    :param dec_media: A iterable yielding decrypted media. Assumes
+                    same order during encryption
     :return Plain text signature string
     """
 
@@ -319,15 +323,12 @@ def _build_signature(
         extract_encrypted_aes_key(tree),
         extract_instance_id(tree),
     ]
-    enc_media_names = extract_encrypted_media_file_names(tree)
 
-    for enc_media_name in enc_media_names:
-        dec_media_name = _strip_enc_extension(enc_media_name)
-
-        if dec_media_name in dec_media:
-            dec_media_file = dec_media[dec_media_name]
-            dec_media_md5_hash = get_md5_hash_from_file(dec_media_file)
-            signature_parts.append(f"{dec_media_name}::{dec_media_md5_hash}")
+    # Assumes order of decrypted media files is the same
+    # order as in submission.xml (order during encryption)
+    for dec_media_name, dec_media_file in dec_media:
+        dec_media_md5_hash = get_md5_hash_from_file(dec_media_file)
+        signature_parts.append(f"{dec_media_name}::{dec_media_md5_hash}")
 
     enc_submission_name = extract_encrypted_submission_file_name(tree)
     dec_submission_name = _strip_enc_extension(enc_submission_name)
@@ -341,7 +342,7 @@ def is_submission_valid(
     kms_client: KMSClient,
     tree: ET.Element,
     dec_submission: BytesIO,
-    dec_media: Optional[dict[str, BytesIO]] = None,
+    dec_media: Optional[Iterable[Tuple[str, BytesIO]]] = None,
 ) -> bool:
     """Check if decryted submission is valid
 
@@ -358,7 +359,7 @@ def is_submission_valid(
         return hashlib.md5(message.encode("utf-8")).digest()
 
     if dec_media is None:
-        dec_media = {}
+        dec_media = []
 
     try:
         decrypted_signature = _build_signature(tree, dec_submission, dec_media)

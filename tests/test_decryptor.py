@@ -406,7 +406,7 @@ def test_is_submssion_valid(
         aws_kms_client,
         fake_submission_tree,
         fake_decrypted_submission,
-        fake_decrypted_media,
+        list(fake_decrypted_media.items()),
     )
 
     # Missing media
@@ -421,7 +421,7 @@ def test_is_submssion_valid(
         aws_kms_client,
         fake_submission_tree,
         BytesIO(b"corrupted submission"),
-        fake_decrypted_media,
+        list(fake_decrypted_media.items()),
     )
 
     # Corrupted media
@@ -429,7 +429,9 @@ def test_is_submssion_valid(
         aws_kms_client,
         fake_submission_tree,
         fake_decrypted_submission,
-        {**fake_decrypted_media, "sunset.png": BytesIO(b"corrupted sunset")},
+        list(
+            {**fake_decrypted_media, "sunset.png": BytesIO(b"corrupted sunset")}.items()
+        ),
     )
 
     # Signature mismatch
@@ -457,5 +459,5 @@ def test_is_submssion_valid(
         aws_kms_client,
         fake_submission_tree,
         BytesIO(submission_xml.encode("utf-8")),
-        fake_decrypted_media,
+        list(fake_decrypted_media.items()),
     )
