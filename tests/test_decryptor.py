@@ -194,7 +194,7 @@ def test_decrypt_submission(
     for dec_file_name, dec_file in decrypt_submission(
         aws_kms_client,
         submission_xml=fake_submission_xml,
-        encrypted_files=fake_encrypted_files,
+        enc_files=fake_encrypted_files,
     ):
         assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
 
@@ -230,7 +230,7 @@ def test_corrupted_submission(
             decrypt_submission(
                 aws_kms_client,
                 submission_xml=fake_submission_xml,
-                encrypted_files=enc_files,
+                enc_files=enc_files,
             )
         )
 
@@ -264,7 +264,7 @@ def test_kms_decrypt_called_twice(
             decrypt_submission(
                 aws_kms_client,
                 submission_xml=fake_submission_xml,
-                encrypted_files=fake_encrypted_files,
+                enc_files=fake_encrypted_files,
             )
         )
 
@@ -306,18 +306,18 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     """Decrypting a single file works."""
     plaintext_aes_key, _ = fake_aes_key
     original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
-    encrypted_file = encrypt_submission(original_data, 0)
-    decrypted_file = bytearray()
+    enc_file = encrypt_submission(original_data, 0)
+    dec_file = bytearray()
 
     for chunk in decrypt_file(
-        encrypted_file,
+        enc_file,
         plaintext_aes_key,
         "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
         0,
     ):
-        decrypted_file.extend(chunk)
+        dec_file.extend(chunk)
 
-    assert decrypted_file == original_data
+    assert dec_file == original_data
 
 
 def test_extract_encrypted_signature(fake_submission_tree, fake_signature):
@@ -432,14 +432,14 @@ def test_is_submssion_valid(
 
     # Signature mismatch
     _, fake_encrypted_key = fake_aes_key
-    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
-    encrypted_signature_b64 = base64.b64encode(b"different-signature").decode("utf-8")
+    enc_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+    enc_signature_b64 = base64.b64encode(b"different-signature").decode("utf-8")
     submission_xml = f"""<?xml version="1.0"?>
     <data encrypted="yes" id="test_valigetta" version="202502131337"
           instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
           submissionDate="2025-02-13T13:46:07.458944+00:00"
           xmlns="http://opendatakit.org/submissions">
-        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
+        <base64EncryptedKey>{enc_key_b64}</base64EncryptedKey>
         <meta xmlns="http://openrosa.org/xforms">
             <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
         </meta>
@@ -448,7 +448,7 @@ def test_is_submssion_valid(
             <file>forest.mp4.enc</file>
         </media>
         <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
-        <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
+        <base64EncryptedElementSignature>{enc_signature_b64}</base64EncryptedElementSignature>
     </data>
     """.strip()
     assert not is_submission_valid(

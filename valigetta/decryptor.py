@@ -200,71 +200,69 @@ def decrypt_file(
 def decrypt_submission(
     kms_client: KMSClient,
     submission_xml: BytesIO,
-    encrypted_files: Iterable[Tuple[str, BytesIO]],
+    enc_files: Iterable[Tuple[str, BytesIO]],
 ) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission and media files using AWS KMS.
 
     :param kms_client: KMSClient instance
     :param submission_xml: Submission XML file
-    :param encrypted_files: An iterable yielding encrypted files
+    :param enc_files: An iterable yielding encrypted files
     :return: A generator yielding decrypted files
     """
-    decrypted_files: dict[str, BytesIO] = {}
+    dec_files: dict[str, BytesIO] = {}
     tree = _parse_submission_xml(submission_xml)
 
     logger.debug("Extracting encrypted AES key from submission XML.")
-    encrypted_aes_key_b64 = extract_encrypted_aes_key(tree)
-    encrypted_aes_key = base64.b64decode(encrypted_aes_key_b64)
+    enc_aes_key_b64 = extract_encrypted_aes_key(tree)
+    enc_aes_key = base64.b64decode(enc_aes_key_b64)
 
     logger.debug("Decrypting AES key using AWS KMS.")
-    aes_key = kms_client.decrypt(encrypted_aes_key)
+    aes_key = kms_client.decrypt(enc_aes_key)
 
     instance_id = extract_instance_id(tree)
-    encrypted_submission_name = extract_encrypted_submission_file_name(tree)
-    encrypted_media_names = extract_encrypted_media_file_names(tree)
+    enc_submission_name = extract_encrypted_submission_file_name(tree)
+    enc_media_names = extract_encrypted_media_file_names(tree)
 
     def decrypt_task(enc_file_name: str, enc_file: BytesIO):
         """Helper function to decrypt a single file and store it in BytesIO."""
-        if enc_file_name == encrypted_submission_name:
+        if enc_file_name == enc_submission_name:
             index = 0  # Submission files use index 0
         else:
             try:
-                index = encrypted_media_names.index(enc_file_name) + 1
+                index = enc_media_names.index(enc_file_name) + 1
             except ValueError:
                 raise InvalidSubmission(
                     f"Media {enc_file_name} not found in submission.xml"
                 )
 
         dec_file_name = _strip_enc_extension(enc_file_name)
-        decrypted_stream = BytesIO()
+        dec_stream = BytesIO()
 
         for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
-            decrypted_stream.write(chunk)
+            dec_stream.write(chunk)
 
-        decrypted_stream.seek(0)  # Reset stream position for reading
-        decrypted_files[dec_file_name] = decrypted_stream
+        dec_stream.seek(0)  # Reset stream position for reading
+        dec_files[dec_file_name] = dec_stream
 
     # Use a thread pool to decrypt files in parallel
     with ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(decrypt_task, name, file) for name, file in encrypted_files
+            executor.submit(decrypt_task, name, file) for name, file in enc_files
         ]
 
         # Ensure all decryption tasks complete
         for future in as_completed(futures):
             future.result()
 
-    original_submission_name = _strip_enc_extension(encrypted_submission_name)
-    decrypted_submission = decrypted_files[original_submission_name]
-    decrypted_media = {
-        k: v for k, v in decrypted_files.items() if k != original_submission_name
-    }
+    dec_submission_name = _strip_enc_extension(enc_submission_name)
+    dec_submission = dec_files[dec_submission_name]
+    dec_media = {k: v for k, v in dec_files.items() if k != dec_submission_name}
 
     if not is_submission_valid(
         kms_client=kms_client,
         tree=tree,
-        decrypted_submission=decrypted_submission,
-        decrypted_media=decrypted_media,
+        dec_submission=dec_submission,
+        dec_media=dec_media,
     ):
         raise InvalidSubmission(
             (
@@ -273,8 +271,8 @@ def decrypt_submission(
             )
         )
 
-    for decrypted_file_name, decrypted_file in decrypted_files.items():
-        yield decrypted_file_name, decrypted_file
+    for dec_file_name, dec_file in dec_files.items():
+        yield dec_file_name, dec_file
 
 
 def _strip_enc_extension(encrypted_file_name: str) -> str:
@@ -284,8 +282,8 @@ def _strip_enc_extension(encrypted_file_name: str) -> str:
 
 def _build_signature(
     tree: ET.Element,
-    decrypted_submission: BytesIO,
-    decrypted_media: dict[str, BytesIO],
+    dec_submission: BytesIO,
+    dec_media: dict[str, BytesIO],
 ) -> str:
     """Build a signature from a decrypted submission's content
 
@@ -298,8 +296,8 @@ def _build_signature(
     - Submission file name with its MD5 hash
 
     :param tree: Parsed XML tree
-    :param decrypted_submission: Decrypted submission file
-    :param decrypted_media: A dictionary of original media file names
+    :param dec_submission: Decrypted submission file
+    :param dec_media: A dictionary of original media file names
                             mapped to the decrypted file
     :return Plain text signature string
     """
@@ -320,20 +318,18 @@ def _build_signature(
     signature_parts.append(extract_encrypted_aes_key(tree))
     signature_parts.append(extract_instance_id(tree))
 
-    for encrypted_media_name in extract_encrypted_media_file_names(tree):
-        original_media_name = _strip_enc_extension(encrypted_media_name)
+    for enc_media_name in extract_encrypted_media_file_names(tree):
+        dec_media_name = _strip_enc_extension(enc_media_name)
 
-        if original_media_name in decrypted_media:
-            original_media_file = decrypted_media[original_media_name]
-            original_media_md5_hash = get_md5_hash_from_file(original_media_file)
-            signature_parts.append(f"{original_media_name}::{original_media_md5_hash}")
+        if dec_media_name in dec_media:
+            dec_media_file = dec_media[dec_media_name]
+            dec_media_md5_hash = get_md5_hash_from_file(dec_media_file)
+            signature_parts.append(f"{dec_media_name}::{dec_media_md5_hash}")
 
-    encrypted_submission_name = extract_encrypted_submission_file_name(tree)
-    original_submission_name = _strip_enc_extension(encrypted_submission_name)
-    original_submission_md5_hash = get_md5_hash_from_file(decrypted_submission)
-    signature_parts.append(
-        f"{original_submission_name}::{original_submission_md5_hash}"
-    )
+    enc_submission_name = extract_encrypted_submission_file_name(tree)
+    dec_submission_name = _strip_enc_extension(enc_submission_name)
+    dec_submission_md5_hash = get_md5_hash_from_file(dec_submission)
+    signature_parts.append(f"{dec_submission_name}::{dec_submission_md5_hash}")
 
     return "\n".join(signature_parts) + "\n"
 
@@ -341,15 +337,15 @@ def _build_signature(
 def is_submission_valid(
     kms_client: KMSClient,
     tree: ET.Element,
-    decrypted_submission: BytesIO,
-    decrypted_media: Optional[dict[str, BytesIO]] = None,
+    dec_submission: BytesIO,
+    dec_media: Optional[dict[str, BytesIO]] = None,
 ) -> bool:
     """Check if decryted submission is valid
 
     :param kms_client: KMSClient instance
     :param tree: Parsed XML tree
-    :param decrypted_submission: Decrypted submission file
-    :param decrypted_media: A dictionary of original media file names
+    :param dec_submission: Decrypted submission file
+    :param dec_media: A dictionary of original media file names
                             mapped to the decrypted file
     :return True if submission is valid, False otherwise
     """
@@ -358,13 +354,11 @@ def is_submission_valid(
         """Computes the MD5 digest of the given message (UTF-8 encoded)."""
         return hashlib.md5(message.encode("utf-8")).digest()
 
-    if decrypted_media is None:
-        decrypted_media = {}
+    if dec_media is None:
+        dec_media = {}
 
     try:
-        decrypted_signature = _build_signature(
-            tree, decrypted_submission, decrypted_media
-        )
+        decrypted_signature = _build_signature(tree, dec_submission, dec_media)
         computed_signature_digest = compute_digest(decrypted_signature)
         encrypted_b64_signature = extract_encrypted_signature(tree)
         encrypted_signature = base64.b64decode(encrypted_b64_signature)
