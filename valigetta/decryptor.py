@@ -201,7 +201,7 @@ def decrypt_submission(
     submission_xml: BytesIO,
     enc_files: List[Tuple[str, BytesIO]],
 ) -> Iterator[Tuple[str, BytesIO]]:
-    """Decrypt submission and media files using AWS KMS.
+    """Decrypt submission's encrypted files.
 
     :param kms_client: KMSClient instance
     :param submission_xml: Submission XML file
