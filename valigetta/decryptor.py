@@ -259,9 +259,9 @@ def decrypt_submission(
 
     def dec_media():
         for enc_media_name in enc_media_names:
-            dec_file_name = _strip_enc_extension(enc_media_name)
+            dec_media_name = _strip_enc_extension(enc_media_name)
 
-            yield dec_file_name, dec_files[dec_file_name]
+            yield dec_media_name, dec_files[dec_media_name]
 
     if not is_submission_valid(
         kms_client=kms_client,
