@@ -336,15 +336,15 @@ def is_submission_valid(
     """
 
     def compute_digest(message: str) -> bytes:
-        """Computes the MD5 digest of the given message (UTF-8 encoded)."""
+        """Computes the MD5 digest of the given message"""
         return hashlib.md5(message.encode("utf-8")).digest()
 
     if dec_files is None:
         dec_files = []
 
     try:
-        decrypted_signature = _build_signature(tree, dec_files)
-        computed_signature_digest = compute_digest(decrypted_signature)
+        computed_signature = _build_signature(tree, dec_files)
+        computed_signature_digest = compute_digest(computed_signature)
         encrypted_b64_signature = extract_encrypted_signature(tree)
         encrypted_signature = base64.b64decode(encrypted_b64_signature)
         expected_signature_digest = kms_client.decrypt(encrypted_signature)
