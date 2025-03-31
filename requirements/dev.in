@@ -4,3 +4,4 @@ ipdb
 moto
 pre-commit
 pytest
+types-boto3

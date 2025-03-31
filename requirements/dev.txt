@@ -15,6 +15,8 @@ botocore==1.37.2
     #   boto3
     #   moto
     #   s3transfer
+botocore-stubs==1.37.23
+    # via types-boto3
 certifi==2025.1.31
     # via requests
 cffi==1.17.1
@@ -117,8 +119,16 @@ traitlets==5.14.3
     # via
     #   ipython
     #   matplotlib-inline
+types-awscrt==0.24.2
+    # via botocore-stubs
+types-boto3==1.37.23
+    # via -r requirements/dev.in
+types-s3transfer==0.11.4
+    # via types-boto3
 typing-extensions==4.12.2
-    # via ipython
+    # via
+    #   ipython
+    #   types-boto3
 urllib3==2.3.0
     # via
     #   botocore

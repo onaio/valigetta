@@ -31,4 +31,5 @@ repos:
     rev: v1.15.0
     hooks:
       - id: mypy
-        additional_dependencies: [boto3==1.37.2, pycryptodome==3.21.0]
+        additional_dependencies:
+          [boto3==1.37.2, pycryptodome==3.21.0, types-boto3==1.37.23]

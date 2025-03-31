@@ -12,8 +12,8 @@ def test_aws_create_key(aws_kms_client):
     assert response["Description"] == "Test KMS key"
 
 
-def test_aws_decrypt_aes_key(aws_kms_key, aws_kms_client, boto3_kms_client):
-    """AWSKMSClient decrypt_aes_key decrypts symmetric key."""
+def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
+    """AWSKMSClient decrypt decrypts symmetric key."""
     # Generate a new KMS key
     key_id = aws_kms_key
     aws_kms_client.key_id = key_id  # Set key_id
@@ -24,22 +24,15 @@ def test_aws_decrypt_aes_key(aws_kms_key, aws_kms_client, boto3_kms_client):
     encrypted_aes_key = encrypted_response["CiphertextBlob"]
 
     # Decrypt AES key with KSM key
-    decrypted_key = aws_kms_client.decrypt_aes_key(encrypted_aes_key)
+    decrypted_key = aws_kms_client.decrypt(encrypted_aes_key)
 
     assert decrypted_key == plaintext_key
 
-
-def test_aws_dec_aes_key_id_required(aws_kms_key, aws_kms_client, boto3_kms_client):
-    """AWSKMSClient decrypt_aes_key requires key_id"""
-    # Encrypt a test AES key with KMS key
-    plaintext_key = b"test-aes-key-1234"
-    encrypted_response = boto3_kms_client.encrypt(
-        KeyId=aws_kms_key, Plaintext=plaintext_key
-    )
-    encrypted_aes_key = encrypted_response["CiphertextBlob"]
+    # key_id is required
+    aws_kms_client.key_id = None
 
     with pytest.raises(ValueError) as exc_info:
-        aws_kms_client.decrypt_aes_key(encrypted_aes_key)
+        aws_kms_client.decrypt(encrypted_aes_key)
 
     assert str(exc_info.value) == "A key_id must be provided."
 
@@ -55,12 +48,8 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
 
     assert response == b"fake-public-key"
 
-
-def test_aws_get_pub_key_id_required(aws_kms_client):
-    """AWSKMSClient get_public_key requires key_id"""
-    aws_kms_client.boto3_client.get_public_key = Mock(
-        return_value={"PublicKey": b"fake-public-key"}
-    )
+    # key_id is required
+    aws_kms_client.key_id = None
 
     with pytest.raises(ValueError) as exc_info:
         aws_kms_client.get_public_key()
@@ -76,9 +65,9 @@ def test_aws_describe_key(aws_kms_client, aws_kms_key):
     assert "KeyId" in response
     assert "AWSAccountId" in response
 
+    # key_id required
+    aws_kms_client.key_id = None
 
-def test_aws_describe_key_id_required(aws_kms_client):
-    """AWSKMSClient update_key_description requires key_id."""
     with pytest.raises(ValueError) as exc_info:
         aws_kms_client.describe_key()
 
@@ -96,9 +85,9 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
         KeyId=key_id, Description="New description"
     )
 
+    # key_id required
+    aws_kms_client.key_id = None
 
-def test_aws_update_key_desc_id_required(aws_kms_client):
-    """AWSKMSClient update_key_description requires key_id."""
     with pytest.raises(ValueError) as exc_info:
         aws_kms_client.update_key_description("New description")
 
@@ -114,9 +103,9 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
 
     aws_kms_client.boto3_client.disable_key.assert_called_once_with(KeyId=key_id)
 
+    # key_id required
+    aws_kms_client.key_id = None
 
-def test_aws_disable_key_id_required(aws_kms_client):
-    """AWSKMSClient disable_key requires key_id."""
     with pytest.raises(ValueError) as exc_info:
         aws_kms_client.disable_key()
 
