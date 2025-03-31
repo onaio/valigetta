@@ -67,8 +67,8 @@ class AWSKMSClient(KMSClient):
     def decrypt(self, ciphertext: bytes) -> bytes:
         """Decrypt ciphertext that was encrypted using AWS KMS key.
 
-        :param encrypted_aes_key: Encrypted symmetric key.
-        :return: Decrypted AES key in plaintext.
+        :param ciphertext: Encrypted data to decrypt.
+        :return: Decrypted plaintext data.
         """
         response = self.boto3_client.decrypt(
             CiphertextBlob=ciphertext,
@@ -102,7 +102,7 @@ class AWSKMSClient(KMSClient):
             KeyId=self._ensure_key_id(), Description=description
         )
 
-    def disable_key(self):
+    def disable_key(self) -> None:
         """Sets the state of a KMS key to disabled
 
         Prevents use of the KMS key.
