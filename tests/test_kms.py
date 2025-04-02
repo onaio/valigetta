@@ -58,7 +58,6 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
 def test_aws_disable_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient disable_key disables KMS key."""
     key_id = aws_kms_key
-    aws_kms_client.key_id = key_id
     aws_kms_client.boto3_client.disable_key = Mock()
     aws_kms_client.disable_key(key_id)
 
