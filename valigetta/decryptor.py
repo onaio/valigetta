@@ -198,12 +198,14 @@ def decrypt_file(
 
 def decrypt_submission(
     kms_client: KMSClient,
+    key_id: str,
     submission_xml: BytesIO,
     enc_files: List[Tuple[str, BytesIO]],
 ) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission's encrypted files.
 
     :param kms_client: KMSClient instance
+    :param key_id: Identifier for the KMS key
     :param submission_xml: Submission XML file
     :param enc_files: Encrypted files
     :return: A generator yielding decrypted files
@@ -215,7 +217,7 @@ def decrypt_submission(
     enc_aes_key = base64.b64decode(enc_aes_key_b64)
 
     logger.debug("Decrypting AES key using AWS KMS.")
-    aes_key = kms_client.decrypt(enc_aes_key)
+    aes_key = kms_client.decrypt(key_id=key_id, ciphertext=enc_aes_key)
 
     instance_id = extract_instance_id(tree)
     enc_submission_name = extract_encrypted_submission_file_name(tree)
@@ -243,6 +245,7 @@ def decrypt_submission(
 
     if not is_submission_valid(
         kms_client=kms_client,
+        key_id=key_id,
         tree=tree,
         dec_files=decrypt_files(),
     ):
@@ -323,12 +326,14 @@ def _build_signature(
 
 def is_submission_valid(
     kms_client: KMSClient,
+    key_id: str,
     tree: ET.Element,
     dec_files: Iterable[Tuple[str, BytesIO]],
 ) -> bool:
     """Check if decryted submission is valid
 
     :param kms_client: KMSClient instance
+    :param key_id: Identifier for the KMS key
     :param tree: Parsed XML tree
     :param dec_files: Decrypted files
     :return True if submission is valid, False otherwise
@@ -343,7 +348,9 @@ def is_submission_valid(
         computed_signature_digest = compute_digest(computed_signature)
         encrypted_b64_signature = extract_encrypted_signature(tree)
         encrypted_signature = base64.b64decode(encrypted_b64_signature)
-        expected_signature_digest = kms_client.decrypt(encrypted_signature)
+        expected_signature_digest = kms_client.decrypt(
+            key_id=key_id, ciphertext=encrypted_signature
+        )
 
         logger.debug("Comparing submission signatures")
 
