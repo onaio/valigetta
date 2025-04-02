@@ -189,10 +189,9 @@ def test_decrypt_submission(
     fake_encrypted_files,
 ):
     """Decryption of an ODK submission."""
-    aws_kms_client.key_id = aws_kms_key
-
     for dec_file_name, dec_file in decrypt_submission(
-        aws_kms_client,
+        kms_client=aws_kms_client,
+        key_id=aws_kms_key,
         submission_xml=fake_submission_xml,
         enc_files=fake_encrypted_files,
     ):
@@ -208,7 +207,6 @@ def test_corrupted_submission(
     encrypt_submission,
 ):
     """Corrupt data is handled."""
-    aws_kms_client.key_id = aws_kms_key
     # All have an initialization vector of 0
     enc_files = [
         (
@@ -228,7 +226,8 @@ def test_corrupted_submission(
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
             decrypt_submission(
-                aws_kms_client,
+                kms_client=aws_kms_client,
+                key_id=aws_kms_key,
                 submission_xml=fake_submission_xml,
                 enc_files=enc_files,
             )
@@ -254,15 +253,15 @@ def test_kms_decrypt_called_twice(
     1st call decrypts AES key
     2nd call decrypts signature
     """
+    key_id = aws_kms_key
     plaintext_key, fake_encrypted_key = fake_aes_key
-
-    aws_kms_client.key_id = aws_kms_key
     aws_kms_client.decrypt = MagicMock(return_value=plaintext_key)
 
     try:
         list(
             decrypt_submission(
-                aws_kms_client,
+                kms_client=aws_kms_client,
+                key_id=key_id,
                 submission_xml=fake_submission_xml,
                 enc_files=fake_encrypted_files,
             )
@@ -271,7 +270,10 @@ def test_kms_decrypt_called_twice(
     except InvalidSubmission:
         pass
 
-    calls = [call(fake_encrypted_key), call(fake_signature)]
+    calls = [
+        call(key_id=key_id, ciphertext=fake_encrypted_key),
+        call(key_id=key_id, ciphertext=fake_signature),
+    ]
     aws_kms_client.decrypt.assert_has_calls(calls)
 
 
@@ -399,19 +401,21 @@ def test_is_submssion_valid(
     fake_aes_key,
 ):
     """Is valid check for decrypted submission contents works."""
-    aws_kms_client.key_id = aws_kms_key
+    key_id = aws_kms_key
 
     assert is_submission_valid(
-        aws_kms_client,
-        fake_submission_tree,
-        list(fake_decrypted_files.items()),
+        kms_client=aws_kms_client,
+        key_id=key_id,
+        tree=fake_submission_tree,
+        dec_files=list(fake_decrypted_files.items()),
     )
 
     # Corrupted file
     assert not is_submission_valid(
-        aws_kms_client,
-        fake_submission_tree,
-        list(
+        kms_client=aws_kms_client,
+        key_id=key_id,
+        tree=fake_submission_tree,
+        dec_files=list(
             {**fake_decrypted_files, "sunset.png": BytesIO(b"corrupted sunset")}.items()
         ),
     )
@@ -442,7 +446,8 @@ def test_is_submssion_valid(
     dec_files[0] = ("submission.xml", BytesIO(submission_xml.encode("utf-8")))
 
     assert not is_submission_valid(
-        aws_kms_client,
-        fake_submission_tree,
-        dec_files,
+        kms_client=aws_kms_client,
+        key_id=key_id,
+        tree=fake_submission_tree,
+        dec_files=dec_files,
     )
