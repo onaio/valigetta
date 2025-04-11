@@ -169,12 +169,12 @@ def fake_encrypted_files(
 ):
     return [
         (
-            "sunset.png.enc",
-            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
-        ),
-        (
             "forest.mp4.enc",
             encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 2),
+        ),
+        (
+            "sunset.png.enc",
+            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
         ),
         (
             "submission.xml.enc",
