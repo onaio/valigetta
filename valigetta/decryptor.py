@@ -152,15 +152,15 @@ def extract_encrypted_media_file_names(tree: ET.Element) -> List[str]:
     ]
 
 
-def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
+def _get_submission_iv(instance_id: str, aes_key: bytes, iv_counter: int) -> bytes:
     """Generates a 16-byte initialization vector (IV) for AES encryption.
 
     The IV is created by hashing the instance ID and AES key, then mutating
-    the hash based on the index.
+    the hash based on the iv_counter.
 
     :param instance_id: Unique instance ID from submission.xml
     :param aes_key: Symmetric key used for encryption
-    :param index: Counter used for mutating the IV
+    :param iv_counter: Counter used for mutating the IV
     :return: A 16-byte initialization vector (IV)
     """
     md5_hash = hashlib.md5()
@@ -169,25 +169,27 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
 
     iv_seed_array = bytearray(md5_hash.digest())
 
-    # Mutate IV based on index
-    for i in range(index):
+    # Mutate IV based on iv_counter
+    for i in range(iv_counter):
         iv_seed_array[i % 16] = (iv_seed_array[i % 16] + 1) % 256
 
     return bytes(iv_seed_array)
 
 
-def decrypt_file(file: BytesIO, aes_key: bytes, instance_id: str, index: int) -> bytes:
+def decrypt_file(
+    file: BytesIO, aes_key: bytes, instance_id: str, iv_counter: int
+) -> bytes:
     """Decrypt a single file.
 
     :param file: File to be decrypted
     :param aes_key: Symmetric key used during encryption
     :param instance_id: instanceID of the submission
-    :param index: Counter used for mutating the IV
+    :param iv_counter: Counter used for mutating the IV
     :return: Decrypted file in bytes
     """
     file.seek(0)
-    logger.debug("Generating IV for index %d", index)
-    iv = _get_submission_iv(instance_id, aes_key, index)
+    logger.debug("Generating IV for iv_counter %d", iv_counter)
+    iv = _get_submission_iv(instance_id, aes_key, iv_counter)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
     return cipher_aes.decrypt(file.read())

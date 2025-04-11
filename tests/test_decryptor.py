@@ -139,10 +139,12 @@ def fake_submission_xml(fake_aes_key, fake_signature):
 
 @pytest.fixture
 def encrypt_submission(fake_aes_key):
-    def _encrypt(original_data, index):
+    def _encrypt(original_data, iv_counter):
         plaintext_aes_key, _ = fake_aes_key
         iv = _get_submission_iv(
-            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", plaintext_aes_key, index=index
+            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+            plaintext_aes_key,
+            iv_counter=iv_counter,
         )
         cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
         return BytesIO(cipher_aes.encrypt(original_data))
