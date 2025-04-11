@@ -167,20 +167,17 @@ def fake_submission_tree(fake_submission_xml):
 def fake_encrypted_files(
     encrypt_submission, fake_decrypted_submission, fake_decrypted_media
 ):
-    return [
-        (
-            "forest.mp4.enc",
-            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 2),
+    return {
+        "forest.mp4.enc": encrypt_submission(
+            fake_decrypted_media["forest.mp4"].getvalue(), 2
         ),
-        (
-            "sunset.png.enc",
-            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
+        "sunset.png.enc": encrypt_submission(
+            fake_decrypted_media["sunset.png"].getvalue(), 1
         ),
-        (
-            "submission.xml.enc",
-            encrypt_submission(fake_decrypted_submission.getvalue(), 3),
+        "submission.xml.enc": encrypt_submission(
+            fake_decrypted_submission.getvalue(), 3
         ),
-    ]
+    }
 
 
 def test_decrypt_submission(
@@ -210,20 +207,17 @@ def test_corrupted_submission(
 ):
     """Corrupt data is handled."""
     # All have an initialization vector of 0
-    enc_files = [
-        (
-            "submission.xml.enc",
-            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
+    enc_files = {
+        "submission.xml.enc": encrypt_submission(
+            fake_decrypted_submission.getvalue(), 0
         ),
-        (
-            "sunset.png.enc",
-            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 0),
+        "sunset.png.enc": encrypt_submission(
+            fake_decrypted_media["sunset.png"].getvalue(), 0
         ),
-        (
-            "forest.mp4.enc",
-            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 0),
+        "forest.mp4.enc": encrypt_submission(
+            fake_decrypted_media["forest.mp4"].getvalue(), 0
         ),
-    ]
+    }
 
     with pytest.raises(InvalidSubmission) as exc_info:
         list(

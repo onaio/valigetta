@@ -199,7 +199,7 @@ def decrypt_submission(
     kms_client: KMSClient,
     key_id: str,
     submission_xml: BytesIO,
-    enc_files: List[Tuple[str, BytesIO]],
+    enc_files: dict[str, BytesIO],
 ) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission's encrypted files.
 
@@ -223,27 +223,25 @@ def decrypt_submission(
     enc_media_names = extract_encrypted_media_file_names(tree)
 
     def decrypt_files():
-        # Create a mapping of filenames to their file objects
-        enc_files_map = dict(enc_files)
-
         # Process media files in order they appear in submission.xml
         for i, enc_file_name in enumerate(enc_media_names, start=1):
-            if enc_file_name not in enc_files_map:
+            if enc_file_name not in enc_files:
                 raise InvalidSubmission(
                     f"Media {enc_file_name} not found in submission.xml"
                 )
 
-            enc_file = enc_files_map[enc_file_name]
+            enc_file = enc_files[enc_file_name]
             dec_data = decrypt_file(enc_file, aes_key, instance_id, i)
             yield _strip_enc_extension(enc_file_name), BytesIO(dec_data)
 
         # Process submission file last with index = number of media files + 1
-        if enc_submission_name not in enc_files_map:
+        if enc_submission_name not in enc_files:
             raise InvalidSubmission(
                 f"Submission file {enc_submission_name} not found in provided files"
             )
+
         dec_data = decrypt_file(
-            enc_files_map[enc_submission_name],
+            enc_files[enc_submission_name],
             aes_key,
             instance_id,
             len(enc_media_names) + 1,
