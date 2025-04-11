@@ -176,9 +176,7 @@ def _get_submission_iv(instance_id: str, aes_key: bytes, index: int) -> bytes:
     return bytes(iv_seed_array)
 
 
-def decrypt_file(
-    file: BytesIO, aes_key: bytes, instance_id: str, index: int
-) -> Iterator[bytes]:
+def decrypt_file(file: BytesIO, aes_key: bytes, instance_id: str, index: int) -> bytes:
     """Decrypt a single file.
 
     :param file: File to be decrypted
@@ -192,8 +190,7 @@ def decrypt_file(
     iv = _get_submission_iv(instance_id, aes_key, index)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
 
-    while chunk := file.read(4096):  # Read chunks of 4KB
-        yield cipher_aes.decrypt(chunk)
+    return cipher_aes.decrypt(file.read())
 
 
 def decrypt_submission(
@@ -224,24 +221,28 @@ def decrypt_submission(
     enc_media_names = extract_encrypted_media_file_names(tree)
 
     def decrypt_files():
-        for enc_file_name, enc_file in enc_files:
-            if enc_file_name == enc_submission_name:
-                index = 0  # Submission files use index 0
-            else:
-                try:
-                    index = enc_media_names.index(enc_file_name) + 1
-                except ValueError:
-                    raise InvalidSubmission(
-                        f"Media {enc_file_name} not found in submission.xml"
-                    )
+        # Process media files first with indices starting at 1
+        media_files = [
+            (name, file) for name, file in enc_files if name != enc_submission_name
+        ]
 
-            temp_buffer = BytesIO()
+        for i, (enc_file_name, enc_file) in enumerate(media_files, start=1):
+            if enc_file_name not in enc_media_names:
+                raise InvalidSubmission(
+                    f"Media {enc_file_name} not found in submission.xml"
+                )
 
-            for chunk in decrypt_file(enc_file, aes_key, instance_id, index):
-                temp_buffer.write(chunk)
+            dec_data = decrypt_file(enc_file, aes_key, instance_id, i)
+            yield _strip_enc_extension(enc_file_name), BytesIO(dec_data)
 
-            temp_buffer.seek(0)  # Reset stream position for reading
-            yield _strip_enc_extension(enc_file_name), temp_buffer
+        # Process submission file last
+        submission_file = next(
+            (name, file) for name, file in enc_files if name == enc_submission_name
+        )
+        dec_data = decrypt_file(
+            submission_file[1], aes_key, instance_id, len(media_files) + 1
+        )
+        yield _strip_enc_extension(submission_file[0]), BytesIO(dec_data)
 
     if not is_submission_valid(
         kms_client=kms_client,
@@ -272,7 +273,7 @@ def _build_signature(
 
     The signature is computed by concatenating:
     - Form ID
-    - Version
+    - Version (if present)
     - Encrypted AES key
     - Instance ID
     - Media file names with their MD5 hashes
@@ -293,24 +294,32 @@ def _build_signature(
 
         return md5.hexdigest().zfill(32)  # Ensure 32-character padding
 
-    signature_parts = [
-        extract_form_id(tree),
-        extract_version(tree),
-        extract_encrypted_aes_key(tree),
-        extract_instance_id(tree),
-    ]
+    # Start with form ID
+    signature_parts = [extract_form_id(tree)]
+
+    # Only add version if present
+    version = extract_version(tree)
+
+    if version:
+        signature_parts.append(version)
+
+    # Add encrypted key
+    signature_parts.append(extract_encrypted_aes_key(tree))
+    # Add instance ID
+    signature_parts.append(extract_instance_id(tree))
+
     enc_submission_name = extract_encrypted_submission_file_name(tree)
     dec_submission_name = _strip_enc_extension(enc_submission_name)
     enc_media_names = extract_encrypted_media_file_names(tree)
     dec_submission_parts = []
     dec_media_parts = [_strip_enc_extension(name) for name in enc_media_names]
 
+    # Media files in the same order as they appear in submission.xml
     for dec_file_name, dec_file in dec_files:
         if dec_file_name == dec_submission_name:
             # Submission file
             dec_file_md5_hash = get_md5_hash_from_file(dec_file)
             dec_submission_parts.append(f"{dec_submission_name}::{dec_file_md5_hash}")
-
         else:
             # Media file. We concatenate media hashes in the same order
             # the files appear in submission.xml
@@ -319,9 +328,13 @@ def _build_signature(
             dec_media_parts[index] = f"{dec_file_name}::{dec_file_md5_hash}"
 
     signature_parts.extend(dec_media_parts)
+
+    # Submission file last
     signature_parts.extend(dec_submission_parts)
 
-    return "\n".join(signature_parts) + "\n"
+    signature = "\n".join(signature_parts) + "\n"
+    logger.debug("Built signature:\n%s", signature)
+    return signature
 
 
 def is_submission_valid(
@@ -352,7 +365,8 @@ def is_submission_valid(
             key_id=key_id, ciphertext=encrypted_signature
         )
 
-        logger.debug("Comparing submission signatures")
+        logger.debug("Computed signature digest: %r", computed_signature_digest)
+        logger.debug("Expected signature digest: %r", expected_signature_digest)
 
         return hmac.compare_digest(expected_signature_digest, computed_signature_digest)
 

@@ -167,16 +167,16 @@ def fake_encrypted_files(
 ):
     return [
         (
-            "submission.xml.enc",
-            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
-        ),
-        (
             "sunset.png.enc",
             encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
         ),
         (
             "forest.mp4.enc",
             encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 2),
+        ),
+        (
+            "submission.xml.enc",
+            encrypt_submission(fake_decrypted_submission.getvalue(), 3),
         ),
     ]
 
@@ -310,16 +310,10 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     """Decrypting a single file works."""
     plaintext_aes_key, _ = fake_aes_key
     original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
-    enc_file = encrypt_submission(original_data, 0)
-    dec_file = bytearray()
-
-    for chunk in decrypt_file(
-        enc_file,
-        plaintext_aes_key,
-        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
-        0,
-    ):
-        dec_file.extend(chunk)
+    enc_file = encrypt_submission(original_data, 1)
+    dec_file = decrypt_file(
+        enc_file, plaintext_aes_key, "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", 1
+    )
 
     assert dec_file == original_data
 
