@@ -441,3 +441,41 @@ def test_is_submssion_valid(
         tree=fake_submission_tree,
         dec_files=dec_files,
     )
+
+
+def test_decrypt_submission_with_missing_media_file(
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+):
+    """Decrypt submission with missing files raises an error."""
+    fake_encrypted_files.pop("forest.mp4.enc")
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "Failed to validate submission: Media file forest.mp4.enc "
+        "not found in provided files."
+    )
+
+
+def test_decrypt_submission_with_missing_submission_file(
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+):
+    """Decrypt submission with missing submission file raises an error."""
+    fake_encrypted_files.pop("submission.xml.enc")
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "Failed to validate submission: Submission file submission.xml.enc "
+        "not found in provided files."
+    )

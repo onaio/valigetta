@@ -227,7 +227,7 @@ def decrypt_submission(
         for i, enc_file_name in enumerate(enc_media_names, start=1):
             if enc_file_name not in enc_files:
                 raise InvalidSubmission(
-                    f"Media {enc_file_name} not found in submission.xml"
+                    f"Media file {enc_file_name} not found in provided files."
                 )
 
             enc_file = enc_files[enc_file_name]
@@ -237,7 +237,7 @@ def decrypt_submission(
         # Process submission file last with index = number of media files + 1
         if enc_submission_name not in enc_files:
             raise InvalidSubmission(
-                f"Submission file {enc_submission_name} not found in provided files"
+                f"Submission file {enc_submission_name} not found in provided files."
             )
 
         dec_data = decrypt_file(
