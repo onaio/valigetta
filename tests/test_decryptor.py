@@ -45,16 +45,13 @@ def fake_decrypted_media():
 def fake_decrypted_submission():
     """Fake decrypted XML content for the submission."""
     xml_content = """<?xml version="1.0"?>
-    <data id="test_valigetta" version="202502131337"
-          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
-          xmlns="http://opendatakit.org/submissions">
-        <meta xmlns="http://openrosa.org/xforms">
+    <data xmlns:jr="http://openrosa.org/javarosa" xmlns:orx="http://openrosa.org/xforms"
+    id="test_valigetta" version="202502131337">
+        <sunset>sunset.png</sunset>
+        <forest>forest.mp4</forest>
+        <meta>
             <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
         </meta>
-        <media>
-            <file>sunset.png</file>
-            <file>forest.mp4</file>
-        </media>
     </data>
     """.strip()
 
