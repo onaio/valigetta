@@ -11,6 +11,7 @@ from io import BytesIO
 from typing import Iterable, Iterator, List, Optional, Tuple
 
 from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
 
 from valigetta.exceptions import InvalidSubmission
 from valigetta.kms import KMSClient
@@ -191,8 +192,9 @@ def decrypt_file(
     logger.debug("Generating IV for iv_counter %d", iv_counter)
     iv = _get_submission_iv(instance_id, aes_key, iv_counter)
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-
-    return cipher_aes.decrypt(file.read())
+    decrypted = cipher_aes.decrypt(file.read())
+    # Strip any PKCS5/PKCS7 padding
+    return unpad(decrypted, AES.block_size)
 
 
 def decrypt_submission(

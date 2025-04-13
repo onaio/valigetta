@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 
 from valigetta.decryptor import (
     _get_submission_iv,
@@ -144,7 +145,8 @@ def encrypt_submission(fake_aes_key):
             iv_counter=iv_counter,
         )
         cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-        return BytesIO(cipher_aes.encrypt(original_data))
+        padded_data = pad(original_data, AES.block_size)
+        return BytesIO(cipher_aes.encrypt(padded_data))
 
     return _encrypt
 
