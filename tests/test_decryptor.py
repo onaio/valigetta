@@ -184,9 +184,7 @@ def enketo_submission_tree(fake_aes_key, fake_signature):
         <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
     </data>
     """.strip()
-    file = BytesIO(xml_content.encode("utf-8"))
-    file.seek(0)
-    return ET.fromstring(file.read())
+    return ET.fromstring(xml_content)
 
 
 @pytest.fixture
