@@ -18,10 +18,14 @@ from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
 
-NAMESPACE = {
-    "n": "http://opendatakit.org/submissions",
-    "meta": "http://openrosa.org/xforms",
-}
+
+def _get_namespaces(tree: ET.Element) -> dict:
+    root_ns = tree.tag.split("}")[0].strip("{")
+
+    return {
+        "n": root_ns,
+        "meta": "http://openrosa.org/xforms",
+    }
 
 
 def _parse_submission_xml(submission_xml: BytesIO) -> ET.Element:
@@ -33,11 +37,10 @@ def _parse_submission_xml(submission_xml: BytesIO) -> ET.Element:
         raise InvalidSubmission(f"Invalid XML structure: {exc}")
 
 
-def _extract_xml_value(
-    tree: ET.Element, xpath: str, namespace: dict = NAMESPACE
-) -> Optional[str]:
+def _extract_xml_value(tree: ET.Element, xpath: str) -> Optional[str]:
     """Generic function to extract an XML element's text value."""
-    element = tree.find(xpath, namespace)
+    namespaces = _get_namespaces(tree)
+    element = tree.find(xpath, namespaces)
 
     if element is None or not element.text:
         return None
@@ -146,9 +149,10 @@ def extract_encrypted_media_file_names(tree: ET.Element) -> List[str]:
     :param tree: Parsed XML tree
     :return: List of media file names
     """
+    namespaces = _get_namespaces(tree)
     return [
         elem.text.strip()
-        for elem in tree.findall("n:media/n:file", NAMESPACE)
+        for elem in tree.findall("n:media/n:file", namespaces)
         if elem.text
     ]
 
