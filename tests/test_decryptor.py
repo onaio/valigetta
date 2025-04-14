@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
 
 from valigetta.decryptor import (
     _get_submission_iv,
@@ -45,16 +46,13 @@ def fake_decrypted_media():
 def fake_decrypted_submission():
     """Fake decrypted XML content for the submission."""
     xml_content = """<?xml version="1.0"?>
-    <data id="test_valigetta" version="202502131337"
-          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
-          xmlns="http://opendatakit.org/submissions">
-        <meta xmlns="http://openrosa.org/xforms">
+    <data xmlns:jr="http://openrosa.org/javarosa" xmlns:orx="http://openrosa.org/xforms"
+    id="test_valigetta" version="202502131337">
+        <sunset>sunset.png</sunset>
+        <forest>forest.mp4</forest>
+        <meta>
             <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
         </meta>
-        <media>
-            <file>sunset.png</file>
-            <file>forest.mp4</file>
-        </media>
     </data>
     """.strip()
 
@@ -139,13 +137,16 @@ def fake_submission_xml(fake_aes_key, fake_signature):
 
 @pytest.fixture
 def encrypt_submission(fake_aes_key):
-    def _encrypt(original_data, index):
+    def _encrypt(original_data, iv_counter):
         plaintext_aes_key, _ = fake_aes_key
         iv = _get_submission_iv(
-            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", plaintext_aes_key, index=index
+            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+            plaintext_aes_key,
+            iv_counter=iv_counter,
         )
         cipher_aes = AES.new(plaintext_aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
-        return BytesIO(cipher_aes.encrypt(original_data))
+        padded_data = pad(original_data, AES.block_size)
+        return BytesIO(cipher_aes.encrypt(padded_data))
 
     return _encrypt
 
@@ -165,20 +166,17 @@ def fake_submission_tree(fake_submission_xml):
 def fake_encrypted_files(
     encrypt_submission, fake_decrypted_submission, fake_decrypted_media
 ):
-    return [
-        (
-            "submission.xml.enc",
-            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
+    return {
+        "forest.mp4.enc": encrypt_submission(
+            fake_decrypted_media["forest.mp4"].getvalue(), 2
         ),
-        (
-            "sunset.png.enc",
-            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 1),
+        "sunset.png.enc": encrypt_submission(
+            fake_decrypted_media["sunset.png"].getvalue(), 1
         ),
-        (
-            "forest.mp4.enc",
-            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 2),
+        "submission.xml.enc": encrypt_submission(
+            fake_decrypted_submission.getvalue(), 3
         ),
-    ]
+    }
 
 
 def test_decrypt_submission(
@@ -208,20 +206,17 @@ def test_corrupted_submission(
 ):
     """Corrupt data is handled."""
     # All have an initialization vector of 0
-    enc_files = [
-        (
-            "submission.xml.enc",
-            encrypt_submission(fake_decrypted_submission.getvalue(), 0),
+    enc_files = {
+        "submission.xml.enc": encrypt_submission(
+            fake_decrypted_submission.getvalue(), 0
         ),
-        (
-            "sunset.png.enc",
-            encrypt_submission(fake_decrypted_media["sunset.png"].getvalue(), 0),
+        "sunset.png.enc": encrypt_submission(
+            fake_decrypted_media["sunset.png"].getvalue(), 0
         ),
-        (
-            "forest.mp4.enc",
-            encrypt_submission(fake_decrypted_media["forest.mp4"].getvalue(), 0),
+        "forest.mp4.enc": encrypt_submission(
+            fake_decrypted_media["forest.mp4"].getvalue(), 0
         ),
-    ]
+    }
 
     with pytest.raises(InvalidSubmission) as exc_info:
         list(
@@ -310,16 +305,10 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     """Decrypting a single file works."""
     plaintext_aes_key, _ = fake_aes_key
     original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
-    enc_file = encrypt_submission(original_data, 0)
-    dec_file = bytearray()
-
-    for chunk in decrypt_file(
-        enc_file,
-        plaintext_aes_key,
-        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
-        0,
-    ):
-        dec_file.extend(chunk)
+    enc_file = encrypt_submission(original_data, 1)
+    dec_file = decrypt_file(
+        enc_file, plaintext_aes_key, "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", 1
+    )
 
     assert dec_file == original_data
 
@@ -450,4 +439,42 @@ def test_is_submssion_valid(
         key_id=key_id,
         tree=fake_submission_tree,
         dec_files=dec_files,
+    )
+
+
+def test_decrypt_submission_with_missing_media_file(
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+):
+    """Decrypt submission with missing files raises an error."""
+    fake_encrypted_files.pop("forest.mp4.enc")
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "Failed to validate submission: Media file forest.mp4.enc "
+        "not found in provided files."
+    )
+
+
+def test_decrypt_submission_with_missing_submission_file(
+    aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+):
+    """Decrypt submission with missing submission file raises an error."""
+    fake_encrypted_files.pop("submission.xml.enc")
+
+    with pytest.raises(InvalidSubmission) as exc_info:
+        list(
+            decrypt_submission(
+                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+            )
+        )
+
+    assert str(exc_info.value) == (
+        "Failed to validate submission: Submission file submission.xml.enc "
+        "not found in provided files."
     )
