@@ -329,7 +329,7 @@ def test_extract_encrypted_aes_key(
         str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
     )
 
-    # Enketo submission
+    # Submission with namespace http://opendatakit.org/submissions
     enc_aes_key = extract_encrypted_aes_key(tree_submissions_ns)
 
     assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
@@ -364,7 +364,7 @@ def test_extract_encrypted_signature(
         == "base64EncryptedElementSignature element not found in submission.xml"
     )
 
-    # Enketo submission
+    # Submission with namespace http://opendatakit.org/submissions
     enc_signature = extract_encrypted_signature(tree_submissions_ns)
 
     assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
@@ -382,7 +382,7 @@ def test_extract_encrypted_xml_file_name(tree_encrypted_ns, tree_submissions_ns)
 
     assert str(exc_info.value) == "encryptedXmlFile element not found in submission.xml"
 
-    # Enketo submission
+    # Submission with namespace http://opendatakit.org/submissions
     enc_xml_file_name = extract_encrypted_submission_file_name(tree_submissions_ns)
 
     assert enc_xml_file_name == "submission.xml.enc"
@@ -427,7 +427,7 @@ def test_extract_media_file_names(tree_encrypted_ns, tree_submissions_ns):
 
     assert len(media_file_names) == 0
 
-    # Enketo submission
+    # Submission with namespace http://opendatakit.org/submissions
     media_file_names = extract_encrypted_media_file_names(tree_submissions_ns)
 
     assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
