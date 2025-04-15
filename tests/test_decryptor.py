@@ -118,11 +118,11 @@ def fake_submission_xml(fake_aes_key, fake_signature):
     <data encrypted="yes" id="test_valigetta" version="202502131337"
           instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
           submissionDate="2025-02-13T13:46:07.458944+00:00"
-          xmlns="http://opendatakit.org/submissions">
+          xmlns="http://opendatakit.org/encrypted">
         <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
-        <meta xmlns="http://openrosa.org/xforms">
-            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
-        </meta>
+        <orx:meta xmlns:orx="http://openrosa.org/xforms">
+            <orx:instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</orx:instanceID>
+        </orx:meta>
         <media>
             <file>sunset.png.enc</file>
             <file>forest.mp4.enc</file>
@@ -157,9 +157,35 @@ def fake_decrypted_files(fake_decrypted_submission, fake_decrypted_media):
 
 
 @pytest.fixture
-def fake_submission_tree(fake_submission_xml):
-    fake_submission_xml.seek(0)
-    return ET.fromstring(fake_submission_xml.read())
+def tree_encrypted_ns(fake_submission_xml):
+    """Tree using namespace http://opendatakit.org/encrypted"""
+    return ET.fromstring(fake_submission_xml.getvalue())
+
+
+@pytest.fixture
+def tree_submissions_ns(fake_aes_key, fake_signature):
+    """Tree using namespace http://opendatakit.org/submissions"""
+    _, fake_encrypted_key = fake_aes_key
+    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+    encrypted_signature_b64 = base64.b64encode(fake_signature).decode("utf-8")
+    xml_content = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+          submissionDate="2025-02-13T13:46:07.458944+00:00"
+          xmlns="http://opendatakit.org/submissions">
+        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
+        <meta xmlns="http://openrosa.org/xforms">
+            <instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</instanceID>
+        </meta>
+        <media>
+            <file>sunset.png.enc</file>
+            <file>forest.mp4.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+        <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
+    </data>
+    """.strip()
+    return ET.fromstring(xml_content)
 
 
 @pytest.fixture
@@ -272,9 +298,9 @@ def test_kms_decrypt_called_twice(
     aws_kms_client.decrypt.assert_has_calls(calls)
 
 
-def test_extract_instance_id(fake_submission_tree):
+def test_extract_instance_id(tree_encrypted_ns):
     """Extract of instanceID from submission XML is successful."""
-    instance_id = extract_instance_id(fake_submission_tree)
+    instance_id = extract_instance_id(tree_encrypted_ns)
 
     assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
@@ -285,10 +311,13 @@ def test_extract_instance_id(fake_submission_tree):
     assert str(exc_info.value) == "instanceID not found in submission.xml"
 
 
-def test_extract_encrypted_aes_key(fake_submission_tree, fake_aes_key):
+def test_extract_encrypted_aes_key(
+    tree_encrypted_ns, fake_aes_key, tree_submissions_ns
+):
     """Extraction of encrypted AES key from submission XML is successful."""
     _, fake_encrypted_key = fake_aes_key
-    enc_aes_key = extract_encrypted_aes_key(fake_submission_tree)
+
+    enc_aes_key = extract_encrypted_aes_key(tree_encrypted_ns)
 
     assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
 
@@ -299,6 +328,11 @@ def test_extract_encrypted_aes_key(fake_submission_tree, fake_aes_key):
     assert (
         str(exc_info.value) == "base64EncryptedKey element not found in submission.xml"
     )
+
+    # Submission with namespace http://opendatakit.org/submissions
+    enc_aes_key = extract_encrypted_aes_key(tree_submissions_ns)
+
+    assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
 
 
 def test_decrypt_file(fake_aes_key, encrypt_submission):
@@ -313,9 +347,11 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     assert dec_file == original_data
 
 
-def test_extract_encrypted_signature(fake_submission_tree, fake_signature):
+def test_extract_encrypted_signature(
+    tree_encrypted_ns, fake_signature, tree_submissions_ns
+):
     """Extraction of encrypted signature is successful."""
-    enc_signature = extract_encrypted_signature(fake_submission_tree)
+    enc_signature = extract_encrypted_signature(tree_encrypted_ns)
 
     assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
 
@@ -328,10 +364,15 @@ def test_extract_encrypted_signature(fake_submission_tree, fake_signature):
         == "base64EncryptedElementSignature element not found in submission.xml"
     )
 
+    # Submission with namespace http://opendatakit.org/submissions
+    enc_signature = extract_encrypted_signature(tree_submissions_ns)
 
-def test_extract_encrypted_xml_file_name(fake_submission_tree):
+    assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
+
+
+def test_extract_encrypted_xml_file_name(tree_encrypted_ns, tree_submissions_ns):
     """Extraction of encrypted xml file name is successful."""
-    enc_xml_file_name = extract_encrypted_submission_file_name(fake_submission_tree)
+    enc_xml_file_name = extract_encrypted_submission_file_name(tree_encrypted_ns)
 
     assert enc_xml_file_name == "submission.xml.enc"
 
@@ -341,10 +382,15 @@ def test_extract_encrypted_xml_file_name(fake_submission_tree):
 
     assert str(exc_info.value) == "encryptedXmlFile element not found in submission.xml"
 
+    # Submission with namespace http://opendatakit.org/submissions
+    enc_xml_file_name = extract_encrypted_submission_file_name(tree_submissions_ns)
 
-def test_extract_form_id(fake_submission_tree):
+    assert enc_xml_file_name == "submission.xml.enc"
+
+
+def test_extract_form_id(tree_encrypted_ns):
     """Extraction of submission's form id is successful."""
-    form_id = extract_form_id(fake_submission_tree)
+    form_id = extract_form_id(tree_encrypted_ns)
 
     assert form_id == "test_valigetta"
 
@@ -355,9 +401,9 @@ def test_extract_form_id(fake_submission_tree):
     assert str(exc_info.value) == "Form ID not found in submission.xml"
 
 
-def test_extract_version(fake_submission_tree):
+def test_extract_version(tree_encrypted_ns):
     """Extraction of submission's version is successful."""
-    version = extract_version(fake_submission_tree)
+    version = extract_version(tree_encrypted_ns)
 
     assert version == "202502131337"
 
@@ -368,9 +414,9 @@ def test_extract_version(fake_submission_tree):
     assert str(exc_info.value) == "version not found in submission.xml"
 
 
-def test_extract_media_file_names(fake_submission_tree):
+def test_extract_media_file_names(tree_encrypted_ns, tree_submissions_ns):
     """Extraction of media file names is successful."""
-    media_file_names = extract_encrypted_media_file_names(fake_submission_tree)
+    media_file_names = extract_encrypted_media_file_names(tree_encrypted_ns)
 
     assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
 
@@ -381,10 +427,15 @@ def test_extract_media_file_names(fake_submission_tree):
 
     assert len(media_file_names) == 0
 
+    # Submission with namespace http://opendatakit.org/submissions
+    media_file_names = extract_encrypted_media_file_names(tree_submissions_ns)
+
+    assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
+
 
 def test_is_submssion_valid(
     aws_kms_client,
-    fake_submission_tree,
+    tree_encrypted_ns,
     fake_decrypted_files,
     aws_kms_key,
     fake_aes_key,
@@ -395,7 +446,7 @@ def test_is_submssion_valid(
     assert is_submission_valid(
         kms_client=aws_kms_client,
         key_id=key_id,
-        tree=fake_submission_tree,
+        tree=tree_encrypted_ns,
         dec_files=list(fake_decrypted_files.items()),
     )
 
@@ -403,7 +454,7 @@ def test_is_submssion_valid(
     assert not is_submission_valid(
         kms_client=aws_kms_client,
         key_id=key_id,
-        tree=fake_submission_tree,
+        tree=tree_encrypted_ns,
         dec_files=list(
             {**fake_decrypted_files, "sunset.png": BytesIO(b"corrupted sunset")}.items()
         ),
@@ -437,7 +488,7 @@ def test_is_submssion_valid(
     assert not is_submission_valid(
         kms_client=aws_kms_client,
         key_id=key_id,
-        tree=fake_submission_tree,
+        tree=tree_encrypted_ns,
         dec_files=dec_files,
     )
 
