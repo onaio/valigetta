@@ -34,11 +34,11 @@ jobs:
           coverage xml
 
       - name: Save PR branch coverage
-        id: pr-coverage
+        id: pr_coverage
         run: |
           PR_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
           echo "PR coverage: $PR_COVERAGE%"
-          echo "pr-coverage=$PR_COVERAGE" >> $GITHUB_ENV
+          echo "pr_coverage=$PR_COVERAGE" >> $GITHUB_ENV
 
       - name: Run tests on main branch
         if: github.event_name == 'pull_request'
@@ -52,19 +52,19 @@ jobs:
 
       - name: Save main branch coverage
         if: github.event_name == 'pull_request'
-        id: main-coverage
+        id: main_coverage
         run: |
           MAIN_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
           echo "Main coverage: $MAIN_COVERAGE%"
-          echo "main-coverage=$MAIN_COVERAGE" >> $GITHUB_ENV
+          echo "main_coverage=$MAIN_COVERAGE" >> $GITHUB_ENV
 
       - name: Compare coverage
         if: github.event_name == 'pull_request'
         run: |
-          echo "Main branch coverage: $main-coverage%"
-          echo "PR branch coverage: $pr-coverage%"
-          if (( $(echo "$pr-coverage < $main-coverage" | bc -l) )); then
-            echo "❌ PR coverage ($pr-coverage%) is lower than main branch ($main-coverage%)"
+          echo "Main branch coverage: $main_coverage%"
+          echo "PR branch coverage: $pr_coverage%"
+          if (( $(echo "$pr_coverage < $main_coverage" | bc -l) )); then
+            echo "❌ PR coverage ($pr_coverage%) is lower than main branch ($main_coverage%)"
             exit 1
           fi
 
