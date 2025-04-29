@@ -2,6 +2,7 @@
 
 coverage
 coverage-badge
+diff-cover
 ipdb
 moto
 pre-commit
