@@ -1,31 +1,108 @@
-name: Run Tests and Pre-Commit Hooks
-on: [push]
+name: Tests, Pre-Commit, and Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  run-tests:
+  lint:
+    name: Pre-commit Linting
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.11.2"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
-      - name: Run tests
-        run: pytest -v --durations=5
 
-  run-pre-commit:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
       - uses: actions/setup-python@v4
         with:
           python-version: "3.11.2"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
+
       - name: Run pre-commit hooks
         run: pre-commit run --all-files --show-diff-on-failure
+
+  test-coverage:
+    name: Tests and Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11.2"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest -v --durations=5
+          coverage xml
+
+      - name: Save PR branch coverage
+        id: pr_coverage
+        run: |
+          PR_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
+          echo "PR coverage: $PR_COVERAGE%"
+          echo "pr_coverage=$PR_COVERAGE" >> $GITHUB_ENV
+
+      - name: Compare against main branch coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          git checkout origin/main
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+          coverage run -m pytest -v
+          coverage xml
+          MAIN_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
+          echo "Main branch coverage: $MAIN_COVERAGE%"
+          echo "PR branch coverage: $pr_coverage%"
+          if (( $(echo "$pr_coverage < $MAIN_COVERAGE" | bc -l) )); then
+            echo "❌ PR coverage ($pr_coverage%) is lower than main branch ($MAIN_COVERAGE%)"
+            exit 1
+          fi
+          git checkout -
+
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: coverage-badge -o coverage.svg
+
+      - name: Check if coverage.svg changed
+        if: github.ref == 'refs/heads/main'
+        id: verify-changed-files
+        run: |
+          git fetch origin main
+          if git diff --quiet origin/main -- coverage.svg; then
+            echo "files_changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "files_changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit updated coverage badge
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage.svg
+          git commit -m "update coverage badge [skip ci]"
+
+      - name: Push changes
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
