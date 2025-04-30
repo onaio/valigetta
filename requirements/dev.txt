@@ -23,14 +23,24 @@ cffi==1.17.1
     # via cryptography
 cfgv==3.4.0
     # via pre-commit
+chardet==5.2.0
+    # via diff-cover
 charset-normalizer==3.4.1
     # via requests
+coverage==7.8.0
+    # via
+    #   -r requirements/dev.in
+    #   coverage-badge
+coverage-badge==1.1.2
+    # via -r requirements/dev.in
 cryptography==44.0.2
     # via moto
 decorator==5.2.1
     # via
     #   ipdb
     #   ipython
+diff-cover==9.2.4
+    # via -r requirements/dev.in
 distlib==0.3.9
     # via virtualenv
 executing==2.2.0
@@ -52,7 +62,9 @@ ipython-pygments-lexers==1.1.1
 jedi==0.19.2
     # via ipython
 jinja2==3.1.6
-    # via moto
+    # via
+    #   diff-cover
+    #   moto
 jmespath==1.0.1
     # via
     #   boto3
@@ -76,7 +88,9 @@ pexpect==4.9.0
 platformdirs==4.3.6
     # via virtualenv
 pluggy==1.5.0
-    # via pytest
+    # via
+    #   diff-cover
+    #   pytest
 pre-commit==4.1.0
     # via -r requirements/dev.in
 prompt-toolkit==3.0.50
@@ -91,6 +105,7 @@ pycryptodome==3.21.0
     # via -r requirements/base.in
 pygments==2.19.1
     # via
+    #   diff-cover
     #   ipython
     #   ipython-pygments-lexers
 pytest==8.3.4
@@ -142,3 +157,6 @@ werkzeug==3.1.3
     # via moto
 xmltodict==0.14.2
     # via moto
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools

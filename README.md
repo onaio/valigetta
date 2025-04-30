@@ -1,5 +1,7 @@
 # Valigetta
 
+![coverage](coverage.svg)
+
 A Python Software Development Kit (SDK) for managing keys and decrypting submissions from ODK servers.
 
 ## Development
@@ -50,6 +52,12 @@ To run all tests
 
 ```sh
 pytest -vv
+```
+
+To run tests with coverage
+
+```sh
+coverage run -m pytest -vv
 ```
 
 ## License
