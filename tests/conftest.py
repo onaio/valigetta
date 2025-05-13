@@ -2,7 +2,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from valigetta.kms import AWSKMSClient
+from valigetta.kms import APIKMSClient, AWSKMSClient
 
 
 @pytest.fixture
@@ -25,3 +25,9 @@ def aws_kms_key(aws_kms_client):
     response = aws_kms_client.create_key(description="Test key")
 
     return response["KeyId"]
+
+
+@pytest.fixture
+def api_kms_client():
+    """Fixture to provide a KMSClient instance with mocked credentials."""
+    yield APIKMSClient(base_url="http://localhost:8000", token="test-token")

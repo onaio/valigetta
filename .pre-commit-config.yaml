@@ -32,4 +32,9 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies:
-          [boto3==1.37.2, pycryptodome==3.21.0, types-boto3==1.37.23]
+          [
+            boto3==1.37.2,
+            pycryptodome==3.21.0,
+            types-boto3==1.37.23,
+            types-requests==2.31.0,
+          ]
