@@ -133,8 +133,9 @@ class APIKMSClient(KMSClient):
         self.client_secret = client_secret
 
         data = self._get_token()
-        self.access_token = data["access"]
-        self.refresh_token = data["refresh"]
+
+        self._access_token = data["access"]
+        self._refresh_token = data["refresh"]
 
     def _get_token(self) -> dict:
         """Get a token for the API client"""
@@ -149,7 +150,7 @@ class APIKMSClient(KMSClient):
         """Refresh the token for the API client"""
         response = requests.post(
             f"{self.base_url}/token/refresh",
-            data={"refresh": self.refresh_token},
+            data={"refresh": self._refresh_token},
         )
         response.raise_for_status()
         return response.json()
@@ -157,7 +158,7 @@ class APIKMSClient(KMSClient):
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         url = f"{self.base_url}{path}"
         headers = kwargs.pop("headers", {}).copy()
-        headers["Authorization"] = f"Bearer {self.access_token}"
+        headers["Authorization"] = f"Bearer {self._access_token}"
         kwargs["headers"] = headers
 
         response = requests.request(method, url, **kwargs)
@@ -166,18 +167,18 @@ class APIKMSClient(KMSClient):
         if response.status_code == 401:
             try:
                 data = self._refresh_access_token()
-                self.access_token = data["access"]
+                self._access_token = data["access"]
             except requests.HTTPError as e:
                 if e.response.status_code == 401:
                     data = self._get_token()
-                    self.access_token = data["access"]
-                    self.refresh_token = data["refresh"]
+                    self._access_token = data["access"]
+                    self._refresh_token = data["refresh"]
                 else:
                     raise e
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
-            headers["Authorization"] = f"Bearer {self.access_token}"
+            headers["Authorization"] = f"Bearer {self._access_token}"
             kwargs["headers"] = headers
 
             response = requests.request(method, url, **kwargs)

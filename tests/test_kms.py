@@ -202,8 +202,8 @@ def test_api_get_token():
             client_secret="test-client-secret",
         )
 
-    assert client.access_token == "test-token"
-    assert client.refresh_token == "test-refresh-token"
+    assert client._access_token == "test-token"
+    assert client._refresh_token == "test-refresh-token"
 
     mock_post.assert_called_once_with(
         "http://localhost:8000/token",
@@ -253,7 +253,7 @@ def test_api_refresh_token(api_kms_client):
         ]
         mock_request.assert_has_calls(calls)
 
-    assert api_kms_client.access_token == "new-token"
+    assert api_kms_client._access_token == "new-token"
 
 
 def test_api_refresh_token_failure(api_kms_client):
@@ -301,5 +301,5 @@ def test_api_refresh_token_failure(api_kms_client):
         ]
         mock_request.assert_has_calls(calls)
 
-    assert api_kms_client.access_token == "new-token"
-    assert api_kms_client.refresh_token == "new-refresh-token"
+    assert api_kms_client._access_token == "new-token"
+    assert api_kms_client._refresh_token == "new-refresh-token"
