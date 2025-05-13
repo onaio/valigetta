@@ -127,9 +127,63 @@ class AWSKMSClient(KMSClient):
 class APIKMSClient(KMSClient):
     """Generic API client implementation"""
 
-    def __init__(self, base_url: str, token: str):
+    def __init__(self, base_url: str, client_id: str, client_secret: str):
         self.base_url = base_url
-        self.token = token
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+        data = self._get_token()
+        self.access_token = data["access"]
+        self.refresh_token = data["refresh"]
+
+    def _get_token(self) -> dict:
+        """Get a token for the API client"""
+        response = requests.post(
+            f"{self.base_url}/token",
+            data={"client_id": self.client_id, "client_secret": self.client_secret},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _refresh_access_token(self) -> dict:
+        """Refresh the token for the API client"""
+        response = requests.post(
+            f"{self.base_url}/token/refresh",
+            data={"refresh": self.refresh_token},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+        url = f"{self.base_url}{path}"
+        headers = kwargs.pop("headers", {}).copy()
+        headers["Authorization"] = f"Bearer {self.access_token}"
+        kwargs["headers"] = headers
+
+        response = requests.request(method, url, **kwargs)
+
+        # Handle 401 Unauthorized: try refresh token, then retry once
+        if response.status_code == 401:
+            try:
+                data = self._refresh_access_token()
+                self.access_token = data["access"]
+            except requests.HTTPError as e:
+                if e.response.status_code == 401:
+                    data = self._get_token()
+                    self.access_token = data["access"]
+                    self.refresh_token = data["refresh"]
+                else:
+                    raise e
+
+            # Retry the request once after token refresh
+            headers = kwargs.get("headers", {}).copy()
+            headers["Authorization"] = f"Bearer {self.access_token}"
+            kwargs["headers"] = headers
+
+            response = requests.request(method, url, **kwargs)
+
+        response.raise_for_status()
+        return response
 
     def create_key(self, description: Optional[str] = None) -> dict:
         """Create a new key.
@@ -138,11 +192,7 @@ class APIKMSClient(KMSClient):
                             sensitive material.
         :return: Metadata of the created key.
         """
-        response = requests.post(
-            f"{self.base_url}/keys",
-            json={"description": description},
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
+        response = self._request("POST", "/keys", json={"description": description})
         return response.json()
 
     def decrypt(self, key_id: str, ciphertext: bytes) -> bytes:
@@ -152,10 +202,8 @@ class APIKMSClient(KMSClient):
         :param ciphertext: Encrypted data.
         :return: Decrypted plaintext data.
         """
-        response = requests.post(
-            f"{self.base_url}/keys/{key_id}/decrypt",
-            json={"ciphertext": ciphertext},
-            headers={"Authorization": f"Bearer {self.token}"},
+        response = self._request(
+            "POST", f"/keys/{key_id}/decrypt", json={"ciphertext": ciphertext}
         )
         return response.json()
 
@@ -165,10 +213,7 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: Public key
         """
-        response = requests.get(
-            f"{self.base_url}/keys/{key_id}/public",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
+        response = self._request("GET", f"/keys/{key_id}/public")
         return response.json()
 
     def describe_key(self, key_id: str) -> dict:
@@ -177,10 +222,7 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: Key detailed information
         """
-        response = requests.get(
-            f"{self.base_url}/keys/{key_id}",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
+        response = self._request("GET", f"/keys/{key_id}")
         return response.json()
 
     def update_key_description(self, key_id: str, description: str) -> None:
@@ -189,10 +231,8 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :param description: New description of the KMS key
         """
-        response = requests.put(
-            f"{self.base_url}/keys/{key_id}",
-            json={"description": description},
-            headers={"Authorization": f"Bearer {self.token}"},
+        response = self._request(
+            "PUT", f"/keys/{key_id}", json={"description": description}
         )
         return response.json()
 
@@ -201,8 +241,5 @@ class APIKMSClient(KMSClient):
 
         :param key_id: Identifier for the KMS key
         """
-        response = requests.post(
-            f"{self.base_url}/keys/{key_id}/disable",
-            headers={"Authorization": f"Bearer {self.token}"},
-        )
+        response = self._request("POST", f"/keys/{key_id}/disable")
         return response.json()
