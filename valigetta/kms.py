@@ -168,13 +168,13 @@ class APIKMSClient(KMSClient):
             try:
                 data = self._refresh_access_token()
                 self._access_token = data["access"]
-            except requests.HTTPError as e:
-                if e.response.status_code == 401:
+            except requests.HTTPError as exc:
+                if exc.response.status_code == 401:
                     data = self._get_token()
                     self._access_token = data["access"]
                     self._refresh_token = data["refresh"]
                 else:
-                    raise e
+                    raise exc
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
