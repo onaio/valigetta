@@ -8,3 +8,4 @@ moto
 pre-commit
 pytest
 types-boto3
+types-requests

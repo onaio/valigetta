@@ -51,13 +51,13 @@ pip install -r requirements/dev.txt
 To run all tests
 
 ```sh
-pytest -vv
+pytest -s -vv
 ```
 
 To run tests with coverage
 
 ```sh
-coverage run -m pytest -vv
+coverage run -m pytest -s -vv
 ```
 
 ## License
