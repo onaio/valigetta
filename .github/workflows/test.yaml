@@ -65,6 +65,7 @@ jobs:
           coverage-badge -o public/coverage.svg
 
       - name: Check coverage.svg
+        if: github.ref == 'refs/heads/main'
         run: |
           ls -l public
           cat public/coverage.svg || echo "coverage.svg not found"
