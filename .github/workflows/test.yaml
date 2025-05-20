@@ -59,7 +59,7 @@ jobs:
           git checkout -
 
       - name: Generate coverage badge
-        # if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p public
           coverage-badge -o public/coverage.svg
@@ -70,7 +70,7 @@ jobs:
           cat public/coverage.svg || echo "coverage.svg not found"
 
       - name: Deploy coverage badge to GitHub Pages
-        # if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
