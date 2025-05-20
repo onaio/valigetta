@@ -1,6 +1,6 @@
 # Valigetta
 
-![coverage](coverage.svg)
+![Coverage](https://onaio.github.io/valigetta/coverage/coverage.svg)
 
 A Python Software Development Kit (SDK) for managing keys and decrypting submissions from ODK servers.
 
