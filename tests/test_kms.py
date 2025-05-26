@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
 import requests
@@ -7,11 +8,21 @@ from valigetta.kms import APIKMSClient
 
 def test_aws_create_key(aws_kms_client):
     """AWSKMSClient create_key successfully returns metadata."""
+    creation_date = datetime(2025, 5, 26, 12, tzinfo=timezone.utc)
+    aws_kms_client.boto3_client.create_key = Mock(
+        return_value={
+            "KeyMetadata": {
+                "KeyId": "test-key-id",
+                "Description": "Test KMS key",
+                "CreationDate": creation_date,
+            }
+        }
+    )
     response = aws_kms_client.create_key(description="Test KMS key")
 
-    assert "KeyId" in response
-    assert "Arn" in response
-    assert response["Description"] == "Test KMS key"
+    assert response["key_id"] == "test-key-id"
+    assert response["description"] == "Test KMS key"
+    assert response["creation_date"] == creation_date.isoformat()
 
 
 def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
@@ -30,22 +41,26 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
     assert decrypted_key == plaintext_key
 
 
-def test_aws_get_public_key(aws_kms_client, aws_kms_key):
+@patch("valigetta.kms.der_public_key_to_pem")
+def test_aws_get_public_key(mock_der_public_key_to_pem, aws_kms_client, aws_kms_key):
     """AWSKMSClient get_public_key returns public key"""
     aws_kms_client.boto3_client.get_public_key = Mock(
         return_value={"PublicKey": b"fake-public-key"}
     )
+    mock_der_public_key_to_pem.return_value = "fake-public-key"
     response = aws_kms_client.get_public_key(key_id=aws_kms_key)
 
-    assert response == b"fake-public-key"
+    assert response == "fake-public-key"
 
 
 def test_aws_describe_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient describe_key returns key metadata."""
     response = aws_kms_client.describe_key(key_id=aws_kms_key)
 
-    assert "KeyId" in response
-    assert "AWSAccountId" in response
+    assert "key_id" in response
+    assert "description" in response
+    assert "creation_date" in response
+    assert "enabled" in response
 
 
 def test_aws_update_key_description(aws_kms_client, aws_kms_key):
