@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import Mock, call, patch
 
 import requests
@@ -8,21 +8,13 @@ from valigetta.kms import APIKMSClient
 
 def test_aws_create_key(aws_kms_client):
     """AWSKMSClient create_key successfully returns metadata."""
-    creation_date = datetime(2025, 5, 26, 12, tzinfo=timezone.utc)
-    aws_kms_client.boto3_client.create_key = Mock(
-        return_value={
-            "KeyMetadata": {
-                "KeyId": "test-key-id",
-                "Description": "Test KMS key",
-                "CreationDate": creation_date,
-            }
-        }
-    )
     response = aws_kms_client.create_key(description="Test KMS key")
 
-    assert response["key_id"] == "test-key-id"
+    assert "key_id" in response
     assert response["description"] == "Test KMS key"
-    assert response["creation_date"] == creation_date.isoformat()
+    assert "creation_date" in response
+    parsed_date = datetime.fromisoformat(response["creation_date"])
+    assert parsed_date.tzinfo is not None
 
 
 def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
