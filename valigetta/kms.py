@@ -5,6 +5,8 @@ from typing import Optional
 import boto3
 import requests
 
+from valigetta.utils import der_public_key_to_pem
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +24,7 @@ class KMSClient(ABC):
         raise NotImplementedError("Subclasses must implement decrypt method.")
 
     @abstractmethod
-    def get_public_key(self, key_id: str) -> bytes:
+    def get_public_key(self, key_id: str) -> str:
         """Returns the public key of an asymmetric key"""
         raise NotImplementedError("Subclasses must implement get_public_key method.")
 
@@ -72,7 +74,11 @@ class AWSKMSClient(KMSClient):
             KeySpec="RSA_2048",
             Description=description if description else "",
         )
-        return response["KeyMetadata"]
+        return {
+            "key_id": response["KeyMetadata"]["KeyId"],
+            "description": response["KeyMetadata"]["Description"],
+            "creation_date": response["KeyMetadata"]["CreationDate"].isoformat(),
+        }
 
     def decrypt(self, key_id: str, ciphertext: bytes) -> bytes:
         """Decrypt ciphertext that was encrypted using AWS KMS key.
@@ -88,14 +94,14 @@ class AWSKMSClient(KMSClient):
         )
         return response["Plaintext"]
 
-    def get_public_key(self, key_id: str) -> bytes:
+    def get_public_key(self, key_id: str) -> str:
         """Get AWS KMS key's public key
 
         :param key_id: Identifier for the KMS key
-        :return: Public key
+        :return: PEM-formatted public key
         """
         response = self.boto3_client.get_public_key(KeyId=key_id)
-        return response["PublicKey"]
+        return der_public_key_to_pem(response["PublicKey"])
 
     def describe_key(self, key_id: str) -> dict:
         """Returns detailed information about a KMS key.
@@ -104,7 +110,12 @@ class AWSKMSClient(KMSClient):
         :return: Key detailed information
         """
         response = self.boto3_client.describe_key(KeyId=key_id)
-        return response["KeyMetadata"]
+        return {
+            "key_id": response["KeyMetadata"]["KeyId"],
+            "description": response["KeyMetadata"]["Description"],
+            "creation_date": response["KeyMetadata"]["CreationDate"].isoformat(),
+            "enabled": response["KeyMetadata"]["Enabled"],
+        }
 
     def update_key_description(self, key_id: str, description: str) -> None:
         """Updates the description of a KMS key.
@@ -208,11 +219,11 @@ class APIKMSClient(KMSClient):
         )
         return response.json()
 
-    def get_public_key(self, key_id: str) -> bytes:
+    def get_public_key(self, key_id: str) -> str:
         """Get the public key of a key.
 
         :param key_id: Identifier for the KMS key
-        :return: Public key
+        :return: PEM-formatted public key
         """
         response = self._request("GET", f"/keys/{key_id}/public")
         return response.json()

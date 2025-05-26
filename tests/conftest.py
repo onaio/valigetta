@@ -26,7 +26,7 @@ def aws_kms_key(aws_kms_client):
     """Creates a mocked AWS KMS key."""
     response = aws_kms_client.create_key(description="Test key")
 
-    return response["KeyId"]
+    return response["key_id"]
 
 
 @pytest.fixture

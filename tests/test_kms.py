@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import Mock, call, patch
 
 import requests
@@ -9,9 +10,11 @@ def test_aws_create_key(aws_kms_client):
     """AWSKMSClient create_key successfully returns metadata."""
     response = aws_kms_client.create_key(description="Test KMS key")
 
-    assert "KeyId" in response
-    assert "Arn" in response
-    assert response["Description"] == "Test KMS key"
+    assert "key_id" in response
+    assert response["description"] == "Test KMS key"
+    assert "creation_date" in response
+    parsed_date = datetime.fromisoformat(response["creation_date"])
+    assert parsed_date.tzinfo is not None
 
 
 def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
@@ -31,21 +34,24 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
 
 
 def test_aws_get_public_key(aws_kms_client, aws_kms_key):
-    """AWSKMSClient get_public_key returns public key"""
-    aws_kms_client.boto3_client.get_public_key = Mock(
-        return_value={"PublicKey": b"fake-public-key"}
-    )
-    response = aws_kms_client.get_public_key(key_id=aws_kms_key)
+    """AWSKMSClient get_public_key returns PEM-formatted public key."""
+    pem_str = aws_kms_client.get_public_key(key_id=aws_kms_key)
 
-    assert response == b"fake-public-key"
+    assert isinstance(pem_str, str)
+    assert pem_str.startswith("-----BEGIN PUBLIC KEY-----\n")
+    assert pem_str.endswith("-----END PUBLIC KEY-----\n") or pem_str.endswith(
+        "-----END PUBLIC KEY-----\n\n"
+    )
 
 
 def test_aws_describe_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient describe_key returns key metadata."""
     response = aws_kms_client.describe_key(key_id=aws_kms_key)
 
-    assert "KeyId" in response
-    assert "AWSAccountId" in response
+    assert "key_id" in response
+    assert "description" in response
+    assert "creation_date" in response
+    assert "enabled" in response
 
 
 def test_aws_update_key_description(aws_kms_client, aws_kms_key):

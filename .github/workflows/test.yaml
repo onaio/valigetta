@@ -34,6 +34,7 @@ jobs:
           coverage xml
 
       - name: Save PR branch coverage
+        if: github.event_name == 'pull_request'
         id: pr_coverage
         run: |
           PR_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
@@ -47,8 +48,7 @@ jobs:
           git checkout origin/main
           python -m pip install --upgrade pip
           pip install -r requirements/dev.txt
-          coverage run -m pytest -v
-          coverage xml
+          coverage run -m pytest --tb=short -q
           MAIN_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | tr -d '%')
           echo "Main branch coverage: $MAIN_COVERAGE%"
           echo "PR branch coverage: $pr_coverage%"
