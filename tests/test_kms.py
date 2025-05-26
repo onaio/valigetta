@@ -41,16 +41,15 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
     assert decrypted_key == plaintext_key
 
 
-@patch("valigetta.kms.der_public_key_to_pem")
-def test_aws_get_public_key(mock_der_public_key_to_pem, aws_kms_client, aws_kms_key):
-    """AWSKMSClient get_public_key returns public key"""
-    aws_kms_client.boto3_client.get_public_key = Mock(
-        return_value={"PublicKey": b"fake-public-key"}
-    )
-    mock_der_public_key_to_pem.return_value = "fake-public-key"
-    response = aws_kms_client.get_public_key(key_id=aws_kms_key)
+def test_aws_get_public_key(aws_kms_client, aws_kms_key):
+    """AWSKMSClient get_public_key returns PEM-formatted public key."""
+    pem_str = aws_kms_client.get_public_key(key_id=aws_kms_key)
 
-    assert response == "fake-public-key"
+    assert isinstance(pem_str, str)
+    assert pem_str.startswith("-----BEGIN PUBLIC KEY-----\n")
+    assert pem_str.endswith("-----END PUBLIC KEY-----\n") or pem_str.endswith(
+        "-----END PUBLIC KEY-----\n\n"
+    )
 
 
 def test_aws_describe_key(aws_kms_client, aws_kms_key):
