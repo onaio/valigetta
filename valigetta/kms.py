@@ -45,6 +45,11 @@ class KMSClient(ABC):
         """Disables a KMS key"""
         raise NotImplementedError("Subclasses must implement disable_key method.")
 
+    @abstractmethod
+    def create_alias(self, alias_name: str, key_id: str) -> None:
+        """Creates an alias for a KMS key"""
+        raise NotImplementedError("Subclasses must implement create_alias method.")
+
 
 class AWSKMSClient(KMSClient):
     """AWS KMS Client Implementation."""
@@ -133,6 +138,14 @@ class AWSKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         """
         self.boto3_client.disable_key(KeyId=key_id)
+
+    def create_alias(self, alias_name: str, key_id: str) -> None:
+        """Creates an alias for a KMS key.
+
+        :param alias_name: Name of the alias
+        :param key_id: Identifier for the KMS key
+        """
+        self.boto3_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
 
 
 class APIKMSClient(KMSClient):
@@ -225,8 +238,8 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: PEM-formatted public key
         """
-        response = self._request("GET", f"/keys/{key_id}/public")
-        return response.json()
+        response = self._request("GET", f"/keys/{key_id}")
+        return response.json()["public_key"]
 
     def describe_key(self, key_id: str) -> dict:
         """Get the description of a key.
@@ -254,4 +267,15 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         """
         response = self._request("POST", f"/keys/{key_id}/disable")
+        return response.json()
+
+    def create_alias(self, alias_name: str, key_id: str) -> None:
+        """Create an alias for a key.
+
+        :param alias_name: Name of the alias
+        :param key_id: Identifier for the KMS key
+        """
+        response = self._request(
+            "POST", f"/keys/{key_id}/aliases", json={"alias": alias_name}
+        )
         return response.json()
