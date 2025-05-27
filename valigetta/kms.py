@@ -147,6 +147,13 @@ class AWSKMSClient(KMSClient):
         """
         self.boto3_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
 
+    def delete_alias(self, alias_name: str) -> None:
+        """Deletes an alias for a KMS key.
+
+        :param alias_name: Name of the alias
+        """
+        self.boto3_client.delete_alias(AliasName=alias_name)
+
 
 class APIKMSClient(KMSClient):
     """Generic API client implementation"""
@@ -257,7 +264,7 @@ class APIKMSClient(KMSClient):
         :param description: New description of the KMS key
         """
         response = self._request(
-            "PUT", f"/keys/{key_id}", json={"description": description}
+            "PATCH", f"/keys/{key_id}", json={"description": description}
         )
         return response.json()
 
@@ -275,7 +282,5 @@ class APIKMSClient(KMSClient):
         :param alias_name: Name of the alias
         :param key_id: Identifier for the KMS key
         """
-        response = self._request(
-            "POST", f"/keys/{key_id}/aliases", json={"alias": alias_name}
-        )
+        response = self._request("PATCH", f"/keys/{key_id}", json={"alias": alias_name})
         return response.json()

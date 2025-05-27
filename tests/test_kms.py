@@ -85,6 +85,17 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
     )
 
 
+def test_aws_delete_alias(aws_kms_client, aws_kms_key):
+    """AWSKMSClient delete_alias deletes an alias for a KMS key."""
+    alias_name = "aws/test-alias"
+    aws_kms_client.boto3_client.delete_alias = Mock()
+    aws_kms_client.delete_alias(alias_name=alias_name)
+
+    aws_kms_client.boto3_client.delete_alias.assert_called_once_with(
+        AliasName=alias_name
+    )
+
+
 def test_api_create_key(api_kms_client):
     """APIKMSClient create_key successfully returns metadata."""
     with patch("requests.request") as mock_request:
@@ -166,7 +177,7 @@ def test_api_update_key_description(api_kms_client):
         )
 
     mock_request.assert_called_once_with(
-        "PUT",
+        "PATCH",
         "http://localhost:8000/keys/test-key-id",
         json={"description": "New description"},
         headers={"Authorization": "Bearer test-token"},
@@ -191,8 +202,8 @@ def test_api_create_alias(api_kms_client):
         api_kms_client.create_alias(alias_name="aws/test-alias", key_id="test-key-id")
 
     mock_request.assert_called_once_with(
-        "POST",
-        "http://localhost:8000/keys/test-key-id/aliases",
+        "PATCH",
+        "http://localhost:8000/keys/test-key-id",
         json={"alias": "aws/test-alias"},
         headers={"Authorization": "Bearer test-token"},
     )
