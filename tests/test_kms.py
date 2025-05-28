@@ -74,6 +74,28 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
     aws_kms_client.boto3_client.disable_key.assert_called_once_with(KeyId=key_id)
 
 
+def test_aws_create_alias(aws_kms_client, aws_kms_key):
+    """AWSKMSClient create_alias creates an alias for a KMS key."""
+    alias_name = "test-alias"
+    aws_kms_client.boto3_client.create_alias = Mock()
+    aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
+
+    aws_kms_client.boto3_client.create_alias.assert_called_once_with(
+        AliasName=alias_name, TargetKeyId=aws_kms_key
+    )
+
+
+def test_aws_delete_alias(aws_kms_client, aws_kms_key):
+    """AWSKMSClient delete_alias deletes an alias for a KMS key."""
+    alias_name = "test-alias"
+    aws_kms_client.boto3_client.delete_alias = Mock()
+    aws_kms_client.delete_alias(alias_name=alias_name)
+
+    aws_kms_client.boto3_client.delete_alias.assert_called_once_with(
+        AliasName=alias_name
+    )
+
+
 def test_api_create_key(api_kms_client):
     """APIKMSClient create_key successfully returns metadata."""
     with patch("requests.request") as mock_request:
@@ -105,7 +127,6 @@ def test_api_decrypt(api_kms_client):
         )
 
     assert response["Plaintext"] == b"test-plaintext"
-
     mock_request.assert_called_once_with(
         "POST",
         "http://localhost:8000/keys/test-key-id/decrypt",
@@ -117,14 +138,13 @@ def test_api_decrypt(api_kms_client):
 def test_api_get_public_key(api_kms_client):
     """APIKMSClient get_public_key returns public key."""
     with patch("requests.request") as mock_request:
-        mock_request.return_value.json.return_value = {"PublicKey": b"test-public-key"}
+        mock_request.return_value.json.return_value = {"public_key": "fake-public-key"}
         response = api_kms_client.get_public_key(key_id="test-key-id")
 
-    assert response["PublicKey"] == b"test-public-key"
-
+    assert response == "fake-public-key"
     mock_request.assert_called_once_with(
         "GET",
-        "http://localhost:8000/keys/test-key-id/public",
+        "http://localhost:8000/keys/test-key-id",
         headers={"Authorization": "Bearer test-token"},
     )
 
@@ -142,7 +162,6 @@ def test_api_describe_key(api_kms_client):
     assert response["KeyId"] == "test-key-id"
     assert response["Arn"] == "test-arn"
     assert response["Description"] == "Test KMS key"
-
     mock_request.assert_called_once_with(
         "GET",
         "http://localhost:8000/keys/test-key-id",
@@ -153,21 +172,12 @@ def test_api_describe_key(api_kms_client):
 def test_api_update_key_description(api_kms_client):
     """APIKMSClient update_key_description updates KMS key description."""
     with patch("requests.request") as mock_request:
-        mock_request.return_value.json.return_value = {
-            "KeyId": "test-key-id",
-            "Arn": "test-arn",
-            "Description": "New description",
-        }
-        response = api_kms_client.update_key_description(
+        api_kms_client.update_key_description(
             key_id="test-key-id", description="New description"
         )
 
-    assert response["KeyId"] == "test-key-id"
-    assert response["Arn"] == "test-arn"
-    assert response["Description"] == "New description"
-
     mock_request.assert_called_once_with(
-        "PUT",
+        "PATCH",
         "http://localhost:8000/keys/test-key-id",
         json={"description": "New description"},
         headers={"Authorization": "Bearer test-token"},
@@ -177,20 +187,24 @@ def test_api_update_key_description(api_kms_client):
 def test_api_disable_key(api_kms_client):
     """APIKMSClient disable_key disables KMS key."""
     with patch("requests.request") as mock_request:
-        mock_request.return_value.json.return_value = {
-            "KeyId": "test-key-id",
-            "Arn": "test-arn",
-            "Description": "New description",
-        }
-        response = api_kms_client.disable_key(key_id="test-key-id")
-
-    assert response["KeyId"] == "test-key-id"
-    assert response["Arn"] == "test-arn"
-    assert response["Description"] == "New description"
+        api_kms_client.disable_key(key_id="test-key-id")
 
     mock_request.assert_called_once_with(
         "POST",
         "http://localhost:8000/keys/test-key-id/disable",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+
+def test_api_create_alias(api_kms_client):
+    """APIKMSClient create_alias creates an alias for a KMS key."""
+    with patch("requests.request") as mock_request:
+        api_kms_client.create_alias(alias_name="test-alias", key_id="test-key-id")
+
+    mock_request.assert_called_once_with(
+        "PATCH",
+        "http://localhost:8000/keys/test-key-id",
+        json={"alias": "test-alias"},
         headers={"Authorization": "Bearer test-token"},
     )
 
@@ -223,7 +237,7 @@ def test_api_refresh_token(api_kms_client):
         # Mock the /token/refresh call to return a new access token
         mock_post.return_value.json.return_value = {"access": "new-token"}
 
-        # Mock the /keys/test-key-id/public
+        # Mock the /keys/test-key-id
         # First one returns 401
         mock_401 = Mock()
         mock_401.status_code = 401
@@ -231,7 +245,7 @@ def test_api_refresh_token(api_kms_client):
         # Second one returns 200
         mock_200 = Mock()
         mock_200.status_code = 200
-        mock_200.json.return_value = {b"fake-public-key"}
+        mock_200.json.return_value = {"public_key": "fake-public-key"}
         mock_200.raise_for_status.return_value = None
         # Apply side effect
         mock_request.side_effect = [mock_401, mock_200]
@@ -248,12 +262,12 @@ def test_api_refresh_token(api_kms_client):
         calls = [
             call(
                 "GET",
-                "http://localhost:8000/keys/test-key-id/public",
+                "http://localhost:8000/keys/test-key-id",
                 headers={"Authorization": "Bearer test-token"},
             ),
             call(
                 "GET",
-                "http://localhost:8000/keys/test-key-id/public",
+                "http://localhost:8000/keys/test-key-id",
                 headers={"Authorization": "Bearer new-token"},
             ),
         ]
@@ -272,7 +286,7 @@ def test_api_refresh_token_failure(api_kms_client):
             "access": "new-token",
             "refresh": "new-refresh-token",
         }
-        # Mock the /keys/test-key-id/public
+        # Mock the /keys/test-key-id
         # First one returns 401
         mock_401 = Mock()
         mock_401.status_code = 401
@@ -280,7 +294,7 @@ def test_api_refresh_token_failure(api_kms_client):
         # Second one returns 200
         mock_200 = Mock()
         mock_200.status_code = 200
-        mock_200.json.return_value = {b"fake-public-key"}
+        mock_200.json.return_value = {"public_key": "fake-public-key"}
         mock_200.raise_for_status.return_value = None
         # Apply side effect
         mock_request.side_effect = [mock_401, mock_200]
@@ -296,12 +310,12 @@ def test_api_refresh_token_failure(api_kms_client):
         calls = [
             call(
                 "GET",
-                "http://localhost:8000/keys/test-key-id/public",
+                "http://localhost:8000/keys/test-key-id",
                 headers={"Authorization": "Bearer test-token"},
             ),
             call(
                 "GET",
-                "http://localhost:8000/keys/test-key-id/public",
+                "http://localhost:8000/keys/test-key-id",
                 headers={"Authorization": "Bearer new-token"},
             ),
         ]
