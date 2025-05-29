@@ -134,7 +134,6 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
 
     # ClientError is handled
     with pytest.raises(KMSUpdateKeyDescriptionError):
-        aws_kms_client.boto3_client.update_key_description = Mock()
         aws_kms_client.boto3_client.update_key_description.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -144,7 +143,6 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
 
     # BotoCoreError is handled
     with pytest.raises(KMSUpdateKeyDescriptionError):
-        aws_kms_client.boto3_client.update_key_description = Mock()
         aws_kms_client.boto3_client.update_key_description.side_effect = BotoCoreError()
         aws_kms_client.update_key_description(
             key_id=key_id, description="New description"
@@ -161,7 +159,6 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
 
     # ClientError is handled
     with pytest.raises(KMSDisableKeyError):
-        aws_kms_client.boto3_client.disable_key = Mock()
         aws_kms_client.boto3_client.disable_key.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -169,7 +166,6 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
 
     # BotoCoreError is handled
     with pytest.raises(KMSDisableKeyError):
-        aws_kms_client.boto3_client.disable_key = Mock()
         aws_kms_client.boto3_client.disable_key.side_effect = BotoCoreError()
         aws_kms_client.disable_key(key_id)
 
@@ -186,7 +182,6 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
 
     # ClientError is handled
     with pytest.raises(KMSCreateAliasError):
-        aws_kms_client.boto3_client.create_alias = Mock()
         aws_kms_client.boto3_client.create_alias.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -194,7 +189,6 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
 
     # BotoCoreError is handled
     with pytest.raises(KMSCreateAliasError):
-        aws_kms_client.boto3_client.create_alias = Mock()
         aws_kms_client.boto3_client.create_alias.side_effect = BotoCoreError()
         aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
 
