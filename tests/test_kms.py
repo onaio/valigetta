@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime
 from unittest.mock import Mock, call, patch
 
@@ -283,17 +284,21 @@ def test_api_create_key(api_kms_client):
 
 def test_api_decrypt(api_kms_client):
     """APIKMSClient decrypts encrypted data."""
-    with patch("requests.request") as mock_request:
-        mock_request.return_value.json.return_value = {"Plaintext": "test-plaintext"}
-        response = api_kms_client.decrypt(
-            key_id="test-key-id", ciphertext="test-ciphertext"
-        )
 
-        assert response["Plaintext"] == "test-plaintext"
+    ciphertext = b"test-ciphertext"
+    plaintext = b"test-plaintext"
+    ciphertext_base64 = base64.b64encode(ciphertext).decode("utf-8")
+    plaintext_base64 = base64.b64encode(plaintext).decode("utf-8")
+
+    with patch("requests.request") as mock_request:
+        mock_request.return_value.json.return_value = {"plaintext": plaintext_base64}
+        response = api_kms_client.decrypt(key_id="test-key-id", ciphertext=ciphertext)
+
+        assert response == plaintext
         mock_request.assert_called_once_with(
             "POST",
             "http://localhost:8000/keys/test-key-id/decrypt",
-            json={"ciphertext": "test-ciphertext"},
+            json={"ciphertext": ciphertext_base64},
             headers={"Authorization": "Bearer test-token"},
         )
 
@@ -306,7 +311,7 @@ def test_api_decrypt(api_kms_client):
 
     with patch("requests.request", return_value=mock_response) as mock_request:
         with pytest.raises(KMSDecryptionError) as exc_info:
-            api_kms_client.decrypt(key_id="test-key-id", ciphertext="test-ciphertext")
+            api_kms_client.decrypt(key_id="test-key-id", ciphertext=ciphertext)
 
         assert "Failed to decrypt" in str(exc_info.value)
 

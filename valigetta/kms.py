@@ -1,3 +1,4 @@
+import base64
 import logging
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -294,17 +295,23 @@ class APIKMSClient(KMSClient):
         """Decrypt ciphertext that was encrypted using AWS KMS key.
 
         :param key_id: Identifier for the KMS key
-        :param ciphertext: Encrypted data.
-        :return: Decrypted plaintext data.
+        :param ciphertext: Ciphertext in bytes.
+        :return: Decrypted plaintext in bytes.
         """
+        ciphertext_base64 = base64.b64encode(ciphertext).decode("utf-8")
+
         try:
             response = self._request(
-                "POST", f"/keys/{key_id}/decrypt", json={"ciphertext": ciphertext}
+                "POST",
+                f"/keys/{key_id}/decrypt",
+                json={"ciphertext": ciphertext_base64},
             )
         except KMSClientError as exc:
             raise KMSDecryptionError("Failed to decrypt ciphertext") from exc
 
-        return response.json()
+        plaintext_base64 = response.json()["plaintext"]
+
+        return base64.b64decode(plaintext_base64)
 
     def get_public_key(self, key_id: str) -> str:
         """Get the public key of a key.
