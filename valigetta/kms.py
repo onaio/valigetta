@@ -254,11 +254,11 @@ class APIKMSClient(KMSClient):
                 data = self._refresh_access_token()
                 self._access_token = data["access"]
             except KMSTokenError:
+                # If refresh token fails, try to get a new token
                 try:
                     data = self._get_token()
                     self._access_token = data["access"]
                     self._refresh_token = data["refresh"]
-
                 except KMSTokenError as exc:
                     raise KMSUnauthorizedError("Re-authentication failed") from exc
 
