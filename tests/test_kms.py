@@ -233,20 +233,28 @@ def test_api_create_key(api_kms_client):
         }
         response = api_kms_client.create_key(description="Test KMS key")
 
-    assert "key_id" in response
-    assert "description" in response
+        assert "key_id" in response
+        assert "description" in response
 
-    mock_request.assert_called_once_with(
-        "POST",
-        "http://localhost:8000/keys",
-        json={"description": "Test KMS key"},
-        headers={"Authorization": "Bearer test-token"},
-    )
+        mock_request.assert_called_once_with(
+            "POST",
+            "http://localhost:8000/keys",
+            json={"description": "Test KMS key"},
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSKeyCreationError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.create_key(description="Test KMS key")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSKeyCreationError) as exc_info:
+            api_kms_client.create_key(description="Test KMS key")
+
+        assert "Failed to create key" in str(exc_info.value)
 
 
 def test_api_decrypt(api_kms_client):
@@ -257,18 +265,26 @@ def test_api_decrypt(api_kms_client):
             key_id="test-key-id", ciphertext="test-ciphertext"
         )
 
-    assert response["Plaintext"] == "test-plaintext"
-    mock_request.assert_called_once_with(
-        "POST",
-        "http://localhost:8000/keys/test-key-id/decrypt",
-        json={"ciphertext": "test-ciphertext"},
-        headers={"Authorization": "Bearer test-token"},
-    )
+        assert response["Plaintext"] == "test-plaintext"
+        mock_request.assert_called_once_with(
+            "POST",
+            "http://localhost:8000/keys/test-key-id/decrypt",
+            json={"ciphertext": "test-ciphertext"},
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSDecryptionError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.decrypt(key_id="test-key-id", ciphertext="test-ciphertext")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSDecryptionError) as exc_info:
+            api_kms_client.decrypt(key_id="test-key-id", ciphertext="test-ciphertext")
+
+        assert "Failed to decrypt" in str(exc_info.value)
 
 
 def test_api_get_public_key(api_kms_client):
@@ -277,17 +293,25 @@ def test_api_get_public_key(api_kms_client):
         mock_request.return_value.json.return_value = {"public_key": "fake-public-key"}
         response = api_kms_client.get_public_key(key_id="test-key-id")
 
-    assert response == "fake-public-key"
-    mock_request.assert_called_once_with(
-        "GET",
-        "http://localhost:8000/keys/test-key-id",
-        headers={"Authorization": "Bearer test-token"},
-    )
+        assert response == "fake-public-key"
+        mock_request.assert_called_once_with(
+            "GET",
+            "http://localhost:8000/keys/test-key-id",
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSGetPublicKeyError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.get_public_key(key_id="test-key-id")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSGetPublicKeyError) as exc_info:
+            api_kms_client.get_public_key(key_id="test-key-id")
+
+        assert "Failed to get public key" in str(exc_info.value)
 
 
 def test_api_describe_key(api_kms_client):
@@ -300,19 +324,27 @@ def test_api_describe_key(api_kms_client):
         }
         response = api_kms_client.describe_key(key_id="test-key-id")
 
-    assert response["KeyId"] == "test-key-id"
-    assert response["Arn"] == "test-arn"
-    assert response["Description"] == "Test KMS key"
-    mock_request.assert_called_once_with(
-        "GET",
-        "http://localhost:8000/keys/test-key-id",
-        headers={"Authorization": "Bearer test-token"},
-    )
+        assert response["KeyId"] == "test-key-id"
+        assert response["Arn"] == "test-arn"
+        assert response["Description"] == "Test KMS key"
+        mock_request.assert_called_once_with(
+            "GET",
+            "http://localhost:8000/keys/test-key-id",
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSDescribeKeyError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.describe_key(key_id="test-key-id")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSDescribeKeyError) as exc_info:
+            api_kms_client.describe_key(key_id="test-key-id")
+
+        assert "Failed to describe key" in str(exc_info.value)
 
 
 def test_api_update_key_description(api_kms_client):
@@ -322,19 +354,27 @@ def test_api_update_key_description(api_kms_client):
             key_id="test-key-id", description="New description"
         )
 
-    mock_request.assert_called_once_with(
-        "PATCH",
-        "http://localhost:8000/keys/test-key-id",
-        json={"description": "New description"},
-        headers={"Authorization": "Bearer test-token"},
-    )
+        mock_request.assert_called_once_with(
+            "PATCH",
+            "http://localhost:8000/keys/test-key-id",
+            json={"description": "New description"},
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSUpdateKeyDescriptionError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.update_key_description(
-            key_id="test-key-id", description="New description"
-        )
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSUpdateKeyDescriptionError) as exc_info:
+            api_kms_client.update_key_description(
+                key_id="test-key-id", description="New description"
+            )
+
+        assert "Failed to update key description" in str(exc_info.value)
 
 
 def test_api_disable_key(api_kms_client):
@@ -342,16 +382,24 @@ def test_api_disable_key(api_kms_client):
     with patch("requests.request") as mock_request:
         api_kms_client.disable_key(key_id="test-key-id")
 
-    mock_request.assert_called_once_with(
-        "POST",
-        "http://localhost:8000/keys/test-key-id/disable",
-        headers={"Authorization": "Bearer test-token"},
-    )
+        mock_request.assert_called_once_with(
+            "POST",
+            "http://localhost:8000/keys/test-key-id/disable",
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSDisableKeyError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.disable_key(key_id="test-key-id")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSDisableKeyError) as exc_info:
+            api_kms_client.disable_key(key_id="test-key-id")
+
+        assert "Failed to disable key" in str(exc_info.value)
 
 
 def test_api_create_alias(api_kms_client):
@@ -359,17 +407,25 @@ def test_api_create_alias(api_kms_client):
     with patch("requests.request") as mock_request:
         api_kms_client.create_alias(alias_name="test-alias", key_id="test-key-id")
 
-    mock_request.assert_called_once_with(
-        "PATCH",
-        "http://localhost:8000/keys/test-key-id",
-        json={"alias": "test-alias"},
-        headers={"Authorization": "Bearer test-token"},
-    )
+        mock_request.assert_called_once_with(
+            "PATCH",
+            "http://localhost:8000/keys/test-key-id",
+            json={"alias": "test-alias"},
+            headers={"Authorization": "Bearer test-token"},
+        )
 
     # HTTP error is handled
-    with pytest.raises(KMSCreateAliasError):
-        mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
-        api_kms_client.create_alias(alias_name="test-alias", key_id="test-key-id")
+    mock_response = Mock()
+    mock_response.status_code = 500
+    mock_response.raise_for_status.side_effect = requests.HTTPError(
+        response=Mock(status_code=500)
+    )
+
+    with patch("requests.request", return_value=mock_response) as mock_request:
+        with pytest.raises(KMSCreateAliasError) as exc_info:
+            api_kms_client.create_alias(alias_name="test-alias", key_id="test-key-id")
+
+        assert "Failed to create alias" in str(exc_info.value)
 
 
 def test_api_get_token():
