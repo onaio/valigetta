@@ -243,7 +243,7 @@ def test_api_create_key(api_kms_client):
         headers={"Authorization": "Bearer test-token"},
     )
 
-    # HT error is handled
+    # HTTP error is handled
     with pytest.raises(KMSKeyCreationError):
         mock_request.side_effect = requests.HTTPError(response=Mock(status_code=500))
         api_kms_client.create_key(description="Test KMS key")
