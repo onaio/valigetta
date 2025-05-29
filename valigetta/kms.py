@@ -295,8 +295,8 @@ class APIKMSClient(KMSClient):
         """Decrypt ciphertext that was encrypted using AWS KMS key.
 
         :param key_id: Identifier for the KMS key
-        :param ciphertext: Encrypted data.
-        :return: Decrypted plaintext data.
+        :param ciphertext: Ciphertext in bytes.
+        :return: Decrypted plaintext in bytes.
         """
         ciphertext_base64 = base64.b64encode(ciphertext).decode("utf-8")
 
