@@ -4,7 +4,21 @@ from typing import Optional
 
 import boto3
 import requests
+from botocore.exceptions import BotoCoreError, ClientError
 
+from valigetta.exceptions import (
+    KMSClientError,
+    KMSCreateAliasError,
+    KMSDecryptionError,
+    KMSDeleteAliasError,
+    KMSDescribeKeyError,
+    KMSDisableKeyError,
+    KMSGetPublicKeyError,
+    KMSKeyCreationError,
+    KMSTokenError,
+    KMSUnauthorizedError,
+    KMSUpdateKeyDescriptionError,
+)
 from valigetta.utils import der_public_key_to_pem
 
 logger = logging.getLogger(__name__)
@@ -74,11 +88,15 @@ class AWSKMSClient(KMSClient):
                             sensitive material.
         :return: Metadata of the created key.
         """
-        response = self.boto3_client.create_key(
-            KeyUsage="ENCRYPT_DECRYPT",
-            KeySpec="RSA_2048",
-            Description=description if description else "",
-        )
+        try:
+            response = self.boto3_client.create_key(
+                KeyUsage="ENCRYPT_DECRYPT",
+                KeySpec="RSA_2048",
+                Description=description if description else "",
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSKeyCreationError("Failed to create key") from exc
+
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
             "description": response["KeyMetadata"]["Description"],
@@ -92,11 +110,15 @@ class AWSKMSClient(KMSClient):
         :param ciphertext: Encrypted data.
         :return: Decrypted plaintext data.
         """
-        response = self.boto3_client.decrypt(
-            CiphertextBlob=ciphertext,
-            KeyId=key_id,
-            EncryptionAlgorithm="RSAES_OAEP_SHA_256",
-        )
+        try:
+            response = self.boto3_client.decrypt(
+                CiphertextBlob=ciphertext,
+                KeyId=key_id,
+                EncryptionAlgorithm="RSAES_OAEP_SHA_256",
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSDecryptionError("Failed to decrypt ciphertext") from exc
+
         return response["Plaintext"]
 
     def get_public_key(self, key_id: str) -> str:
@@ -105,7 +127,11 @@ class AWSKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: PEM-formatted public key
         """
-        response = self.boto3_client.get_public_key(KeyId=key_id)
+        try:
+            response = self.boto3_client.get_public_key(KeyId=key_id)
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSGetPublicKeyError("Failed to get public key") from exc
+
         return der_public_key_to_pem(response["PublicKey"])
 
     def describe_key(self, key_id: str) -> dict:
@@ -114,7 +140,11 @@ class AWSKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: Key detailed information
         """
-        response = self.boto3_client.describe_key(KeyId=key_id)
+        try:
+            response = self.boto3_client.describe_key(KeyId=key_id)
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSDescribeKeyError("Failed to describe key") from exc
+
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
             "description": response["KeyMetadata"]["Description"],
@@ -128,7 +158,14 @@ class AWSKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :param description: New description of the KMS key
         """
-        self.boto3_client.update_key_description(KeyId=key_id, Description=description)
+        try:
+            self.boto3_client.update_key_description(
+                KeyId=key_id, Description=description
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSUpdateKeyDescriptionError(
+                "Failed to update key description"
+            ) from exc
 
     def disable_key(self, key_id: str) -> None:
         """Sets the state of a KMS key to disabled
@@ -137,7 +174,10 @@ class AWSKMSClient(KMSClient):
 
         :param key_id: Identifier for the KMS key
         """
-        self.boto3_client.disable_key(KeyId=key_id)
+        try:
+            self.boto3_client.disable_key(KeyId=key_id)
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSDisableKeyError("Failed to disable key") from exc
 
     def create_alias(self, alias_name: str, key_id: str) -> None:
         """Creates an alias for a KMS key.
@@ -145,14 +185,20 @@ class AWSKMSClient(KMSClient):
         :param alias_name: Name of the alias
         :param key_id: Identifier for the KMS key
         """
-        self.boto3_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
+        try:
+            self.boto3_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSCreateAliasError("Failed to create alias") from exc
 
     def delete_alias(self, alias_name: str) -> None:
         """Deletes an alias for a KMS key.
 
         :param alias_name: Name of the alias
         """
-        self.boto3_client.delete_alias(AliasName=alias_name)
+        try:
+            self.boto3_client.delete_alias(AliasName=alias_name)
+        except (BotoCoreError, ClientError) as exc:
+            raise KMSDeleteAliasError("Failed to delete alias") from exc
 
 
 class APIKMSClient(KMSClient):
@@ -170,21 +216,29 @@ class APIKMSClient(KMSClient):
 
     def _get_token(self) -> dict:
         """Get a token for the API client"""
-        response = requests.post(
-            f"{self.base_url}/token",
-            data={"client_id": self.client_id, "client_secret": self.client_secret},
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/token",
+                data={"client_id": self.client_id, "client_secret": self.client_secret},
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as exc:
+            raise KMSTokenError("Failed to get token") from exc
 
     def _refresh_access_token(self) -> dict:
         """Refresh the token for the API client"""
-        response = requests.post(
-            f"{self.base_url}/token/refresh",
-            data={"refresh": self._refresh_token},
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.post(
+                f"{self.base_url}/token/refresh",
+                data={"refresh": self._refresh_token},
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as exc:
+            raise KMSTokenError("Failed to refresh token") from exc
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         url = f"{self.base_url}{path}"
@@ -199,13 +253,14 @@ class APIKMSClient(KMSClient):
             try:
                 data = self._refresh_access_token()
                 self._access_token = data["access"]
-            except requests.HTTPError as exc:
-                if exc.response.status_code == 401:
+            except KMSTokenError:
+                # If refresh token fails, try to get a new token
+                try:
                     data = self._get_token()
                     self._access_token = data["access"]
                     self._refresh_token = data["refresh"]
-                else:
-                    raise exc
+                except KMSTokenError as exc:
+                    raise KMSUnauthorizedError("Re-authentication failed") from exc
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
@@ -214,7 +269,11 @@ class APIKMSClient(KMSClient):
 
             response = requests.request(method, url, **kwargs)
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise KMSClientError(f"Request to {url} failed") from exc
+
         return response
 
     def create_key(self, description: Optional[str] = None) -> dict:
@@ -224,7 +283,11 @@ class APIKMSClient(KMSClient):
                             sensitive material.
         :return: Metadata of the created key.
         """
-        response = self._request("POST", "/keys", json={"description": description})
+        try:
+            response = self._request("POST", "/keys", json={"description": description})
+        except KMSClientError as exc:
+            raise KMSKeyCreationError("Failed to create key") from exc
+
         return response.json()
 
     def decrypt(self, key_id: str, ciphertext: bytes) -> bytes:
@@ -234,9 +297,13 @@ class APIKMSClient(KMSClient):
         :param ciphertext: Encrypted data.
         :return: Decrypted plaintext data.
         """
-        response = self._request(
-            "POST", f"/keys/{key_id}/decrypt", json={"ciphertext": ciphertext}
-        )
+        try:
+            response = self._request(
+                "POST", f"/keys/{key_id}/decrypt", json={"ciphertext": ciphertext}
+            )
+        except KMSClientError as exc:
+            raise KMSDecryptionError("Failed to decrypt ciphertext") from exc
+
         return response.json()
 
     def get_public_key(self, key_id: str) -> str:
@@ -245,7 +312,11 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: PEM-formatted public key
         """
-        response = self._request("GET", f"/keys/{key_id}")
+        try:
+            response = self._request("GET", f"/keys/{key_id}")
+        except KMSClientError as exc:
+            raise KMSGetPublicKeyError("Failed to get public key") from exc
+
         return response.json()["public_key"]
 
     def describe_key(self, key_id: str) -> dict:
@@ -254,7 +325,11 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :return: Key detailed information
         """
-        response = self._request("GET", f"/keys/{key_id}")
+        try:
+            response = self._request("GET", f"/keys/{key_id}")
+        except KMSClientError as exc:
+            raise KMSDescribeKeyError("Failed to describe key") from exc
+
         return response.json()
 
     def update_key_description(self, key_id: str, description: str) -> None:
@@ -263,9 +338,15 @@ class APIKMSClient(KMSClient):
         :param key_id: Identifier for the KMS key
         :param description: New description of the KMS key
         """
-        response = self._request(
-            "PATCH", f"/keys/{key_id}", json={"description": description}
-        )
+        try:
+            response = self._request(
+                "PATCH", f"/keys/{key_id}", json={"description": description}
+            )
+        except KMSClientError as exc:
+            raise KMSUpdateKeyDescriptionError(
+                "Failed to update key description"
+            ) from exc
+
         return response.json()
 
     def disable_key(self, key_id: str) -> None:
@@ -273,7 +354,11 @@ class APIKMSClient(KMSClient):
 
         :param key_id: Identifier for the KMS key
         """
-        response = self._request("POST", f"/keys/{key_id}/disable")
+        try:
+            response = self._request("POST", f"/keys/{key_id}/disable")
+        except KMSClientError as exc:
+            raise KMSDisableKeyError("Failed to disable key") from exc
+
         return response.json()
 
     def create_alias(self, alias_name: str, key_id: str) -> None:
@@ -282,5 +367,11 @@ class APIKMSClient(KMSClient):
         :param alias_name: Name of the alias
         :param key_id: Identifier for the KMS key
         """
-        response = self._request("PATCH", f"/keys/{key_id}", json={"alias": alias_name})
+        try:
+            response = self._request(
+                "PATCH", f"/keys/{key_id}", json={"alias": alias_name}
+            )
+        except KMSClientError as exc:
+            raise KMSCreateAliasError("Failed to create alias") from exc
+
         return response.json()
