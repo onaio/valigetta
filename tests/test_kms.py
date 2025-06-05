@@ -465,9 +465,12 @@ def test_api_get_token():
             "refresh": "test-refresh-token",
         }
         client = APIKMSClient(
-            base_url="http://localhost:8000",
             client_id="test-client-id",
             client_secret="test-client-secret",
+            urls={
+                "token": "http://localhost:8000/token",
+                "token_refresh": "http://localhost:8000/token/refresh",
+            },
         )
 
     assert client._access_token == "test-token"
