@@ -1,74 +1,76 @@
-class InvalidSubmission(Exception):
+class InvalidSubmissionException(Exception):
+    """Raised when a submission is invalid."""
+
     pass
 
 
-class KMSClientError(Exception):
+class KMSClientException(Exception):
     """Base exception for all KMS client errors."""
 
     pass
 
 
-class KMSKeyCreationError(KMSClientError):
+class CreateKeyException(KMSClientException):
     """Raised when KMS key creation fails."""
 
     pass
 
 
-class KMSDecryptionError(KMSClientError):
+class DecryptException(KMSClientException):
     """Raised when decryption with KMS fails."""
 
     pass
 
 
-class KMSGetPublicKeyError(KMSClientError):
+class GetPublicKeyException(KMSClientException):
     """Raised when getting the public key from KMS fails."""
 
     pass
 
 
-class KMSDescribeKeyError(KMSClientError):
+class KMSDescribeKeyError(KMSClientException):
     """Raised when describing a KMS key fails."""
 
     pass
 
 
-class KMSUpdateKeyDescriptionError(KMSClientError):
+class UpdateKeyDescriptionException(KMSClientException):
     """Raised when updating the description of a KMS key fails."""
 
     pass
 
 
-class KMSDisableKeyError(KMSClientError):
+class DisableKeyException(KMSClientException):
     """Raised when disabling a KMS key fails."""
 
     pass
 
 
-class KMSCreateAliasError(KMSClientError):
+class CreateAliasException(KMSClientException):
     """Raised when creating an alias for a KMS key fails."""
 
     pass
 
 
-class KMSDeleteAliasError(KMSClientError):
+class DeleteAliasException(KMSClientException):
     """Raised when deleting an alias for a KMS key fails."""
 
     pass
 
 
-class KMSTokenError(KMSClientError):
+class TokenException(KMSClientException):
     """Raised when token acquisition or refresh fails."""
 
     pass
 
 
-class KMSUnauthorizedError(KMSClientError):
+class UnauthorizedException(KMSClientException):
     """Raised when authentication fails permanently (e.g., bad credentials)."""
 
     pass
 
 
-class KMSInvalidAPIURLsError(KMSClientError):
+class InvalidAPIURLException(KMSClientException):
     """Raised when invalid API URLs are provided."""
 
     pass

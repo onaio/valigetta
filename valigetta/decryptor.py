@@ -13,7 +13,7 @@ from typing import Iterable, Iterator, List, Optional, Tuple
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 
-from valigetta.exceptions import InvalidSubmission
+from valigetta.exceptions import InvalidSubmissionException
 from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def _parse_submission_xml(submission_xml: BytesIO) -> ET.Element:
         submission_xml.seek(0)
         return ET.fromstring(submission_xml.read())
     except ET.ParseError as exc:
-        raise InvalidSubmission(f"Invalid XML structure: {exc}")
+        raise InvalidSubmissionException(f"Invalid XML structure: {exc}")
 
 
 def _extract_xml_value(tree: ET.Element, xpath: str) -> Optional[str]:
@@ -59,7 +59,9 @@ def extract_encrypted_aes_key(tree: ET.Element) -> str:
     if enc_aes_key:
         return enc_aes_key
 
-    raise InvalidSubmission("base64EncryptedKey element not found in submission.xml")
+    raise InvalidSubmissionException(
+        "base64EncryptedKey element not found in submission.xml"
+    )
 
 
 def extract_instance_id(tree: ET.Element) -> str:
@@ -82,7 +84,7 @@ def extract_instance_id(tree: ET.Element) -> str:
         if instance_id_elem is not None and instance_id_elem.text:
             return instance_id_elem.text.strip()
 
-    raise InvalidSubmission("instanceID not found in submission.xml")
+    raise InvalidSubmissionException("instanceID not found in submission.xml")
 
 
 def extract_encrypted_signature(tree: ET.Element) -> str:
@@ -96,7 +98,7 @@ def extract_encrypted_signature(tree: ET.Element) -> str:
     if enc_signature:
         return enc_signature
 
-    raise InvalidSubmission(
+    raise InvalidSubmissionException(
         "base64EncryptedElementSignature element not found in submission.xml"
     )
 
@@ -112,7 +114,9 @@ def extract_encrypted_submission_file_name(tree: ET.Element) -> str:
     if enc_submisson_name:
         return enc_submisson_name
 
-    raise InvalidSubmission("encryptedXmlFile element not found in submission.xml")
+    raise InvalidSubmissionException(
+        "encryptedXmlFile element not found in submission.xml"
+    )
 
 
 def extract_form_id(tree: ET.Element) -> str:
@@ -126,7 +130,7 @@ def extract_form_id(tree: ET.Element) -> str:
     if form_id:
         return form_id
 
-    raise InvalidSubmission("Form ID not found in submission.xml")
+    raise InvalidSubmissionException("Form ID not found in submission.xml")
 
 
 def extract_version(tree: ET.Element) -> str:
@@ -140,7 +144,7 @@ def extract_version(tree: ET.Element) -> str:
     if version:
         return version
 
-    raise InvalidSubmission("version not found in submission.xml")
+    raise InvalidSubmissionException("version not found in submission.xml")
 
 
 def extract_encrypted_media_file_names(tree: ET.Element) -> List[str]:
@@ -232,7 +236,7 @@ def decrypt_submission(
         # Process media files in order they appear in submission.xml
         for i, enc_file_name in enumerate(enc_media_names, start=1):
             if enc_file_name not in enc_files:
-                raise InvalidSubmission(
+                raise InvalidSubmissionException(
                     f"Media file {enc_file_name} not found in provided files."
                 )
 
@@ -242,7 +246,7 @@ def decrypt_submission(
 
         # Process submission file last with index = number of media files + 1
         if enc_submission_name not in enc_files:
-            raise InvalidSubmission(
+            raise InvalidSubmissionException(
                 f"Submission file {enc_submission_name} not found in provided files."
             )
 
@@ -260,7 +264,7 @@ def decrypt_submission(
         tree=tree,
         dec_files=decrypt_files(),
     ):
-        raise InvalidSubmission(
+        raise InvalidSubmissionException(
             (
                 f"Submission validation failed for instance ID {instance_id}. "
                 "Corrupted data or incorrect signature"
@@ -383,4 +387,4 @@ def is_submission_valid(
     except Exception as exc:
         logger.error(f"Error validating submission: {exc}")
 
-        raise InvalidSubmission(f"Failed to validate submission: {exc}")
+        raise InvalidSubmissionException(f"Failed to validate submission: {exc}")
