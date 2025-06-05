@@ -30,7 +30,23 @@ def aws_kms_key(aws_kms_client):
 
 
 @pytest.fixture
-def api_kms_client():
+def api_kms_client_urls():
+    """Fixture to provide a KMSClient instance with mocked credentials."""
+    return {
+        "token": "http://localhost:8000/token",
+        "token_refresh": "http://localhost:8000/token/refresh",
+        "create_key": "http://localhost:8000/keys",
+        "decrypt": "http://localhost:8000/keys/{key_id}/decrypt",
+        "get_public_key": "http://localhost:8000/keys/{key_id}",
+        "describe_key": "http://localhost:8000/keys/{key_id}",
+        "update_key_description": "http://localhost:8000/keys/{key_id}",
+        "disable_key": "http://localhost:8000/keys/{key_id}/disable",
+        "create_alias": "http://localhost:8000/keys/{key_id}",
+    }
+
+
+@pytest.fixture
+def api_kms_client(api_kms_client_urls):
     """Fixture to provide a KMSClient instance with mocked credentials."""
     # Mock the _get_token method
     with patch("valigetta.kms.APIKMSClient._get_token") as mock_get_token:
@@ -42,15 +58,5 @@ def api_kms_client():
         yield APIKMSClient(
             client_id="test-client-id",
             client_secret="test-client-secret",
-            urls={
-                "token": "http://localhost:8000/token",
-                "token_refresh": "http://localhost:8000/token/refresh",
-                "create_key": "http://localhost:8000/keys",
-                "decrypt": "http://localhost:8000/keys/{key_id}/decrypt",
-                "get_public_key": "http://localhost:8000/keys/{key_id}",
-                "describe_key": "http://localhost:8000/keys/{key_id}",
-                "update_key_description": "http://localhost:8000/keys/{key_id}",
-                "disable_key": "http://localhost:8000/keys/{key_id}/disable",
-                "create_alias": "http://localhost:8000/keys/{key_id}",
-            },
+            urls=api_kms_client_urls,
         )

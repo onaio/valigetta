@@ -7,6 +7,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
+    KMSClientError,
     KMSCreateAliasError,
     KMSDecryptionError,
     KMSDeleteAliasError,
@@ -457,7 +458,7 @@ def test_api_create_alias(api_kms_client):
         assert "Failed to create alias" in str(exc_info.value)
 
 
-def test_api_get_token():
+def test_api_get_token(api_kms_client_urls):
     """Token is set on initialization."""
     with patch("requests.post") as mock_post:
         mock_post.return_value.json.return_value = {
@@ -467,10 +468,7 @@ def test_api_get_token():
         client = APIKMSClient(
             client_id="test-client-id",
             client_secret="test-client-secret",
-            urls={
-                "token": "http://localhost:8000/token",
-                "token_refresh": "http://localhost:8000/token/refresh",
-            },
+            urls=api_kms_client_urls,
         )
 
     assert client._access_token == "test-token"
@@ -574,3 +572,55 @@ def test_api_refresh_token_failure(api_kms_client):
 
     assert api_kms_client._access_token == "new-token"
     assert api_kms_client._refresh_token == "new-refresh-token"
+
+
+def test_api_invalid_urls():
+    """APIKMSClient raises an error if invalid URLs are provided."""
+    with pytest.raises(KMSClientError) as exc_info:
+        APIKMSClient(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            urls={
+                "token": "invalid-url",
+                "token_refresh": "invalid-url",
+                "create_key": "invalid-url",
+                "decrypt": "invalid-url",
+                "get_public_key": "invalid-url",
+                "describe_key": "invalid-url",
+                "update_key_description": "invalid-url",
+                "disable_key": "invalid-url",
+                "create_alias": "invalid-url",
+            },
+        )
+
+    errors = exc_info.value.args[0]
+    assert isinstance(errors, dict)
+    assert errors["token"] == "Invalid value 'invalid-url'"
+    assert errors["token_refresh"] == "Invalid value 'invalid-url'"
+    assert errors["create_key"] == "Invalid value 'invalid-url'"
+    assert errors["decrypt"] == "Invalid value 'invalid-url'"
+    assert errors["get_public_key"] == "Invalid value 'invalid-url'"
+    assert errors["describe_key"] == "Invalid value 'invalid-url'"
+    assert errors["update_key_description"] == "Invalid value 'invalid-url'"
+    assert errors["disable_key"] == "Invalid value 'invalid-url'"
+    assert errors["create_alias"] == "Invalid value 'invalid-url'"
+
+
+def test_api_missing_urls():
+    """APIKMSClient raises an error if required URLs are missing."""
+    with pytest.raises(KMSClientError) as exc_info:
+        APIKMSClient(
+            client_id="test-client-id", client_secret="test-client-secret", urls={}
+        )
+
+    errors = exc_info.value.args[0]
+    assert isinstance(errors, dict)
+    assert errors["token"] == "URL is required"
+    assert errors["token_refresh"] == "URL is required"
+    assert errors["create_key"] == "URL is required"
+    assert errors["decrypt"] == "URL is required"
+    assert errors["get_public_key"] == "URL is required"
+    assert errors["describe_key"] == "URL is required"
+    assert errors["update_key_description"] == "URL is required"
+    assert errors["disable_key"] == "URL is required"
+    assert errors["create_alias"] == "URL is required"
