@@ -21,7 +21,7 @@ from valigetta.decryptor import (
     extract_version,
     is_submission_valid,
 )
-from valigetta.exceptions import InvalidSubmission
+from valigetta.exceptions import InvalidSubmissionException
 
 
 @pytest.fixture
@@ -244,7 +244,7 @@ def test_corrupted_submission(
         ),
     }
 
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         list(
             decrypt_submission(
                 kms_client=aws_kms_client,
@@ -288,7 +288,7 @@ def test_kms_decrypt_called_twice(
             )
         )
 
-    except InvalidSubmission:
+    except InvalidSubmissionException:
         pass
 
     calls = [
@@ -305,7 +305,7 @@ def test_extract_instance_id(tree_encrypted_ns):
     assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
     # Missing instanceID
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_instance_id(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "instanceID not found in submission.xml"
@@ -322,7 +322,7 @@ def test_extract_encrypted_aes_key(
     assert enc_aes_key == base64.b64encode(fake_encrypted_key).decode("utf-8")
 
     # Missing encrypted AES key
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_encrypted_aes_key(ET.fromstring(b"<data>hello</data>"))
 
     assert (
@@ -356,7 +356,7 @@ def test_extract_encrypted_signature(
     assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
 
     # Missing signature
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_encrypted_signature(ET.fromstring(b"<data>hello</data>"))
 
     assert (
@@ -377,7 +377,7 @@ def test_extract_encrypted_xml_file_name(tree_encrypted_ns, tree_submissions_ns)
     assert enc_xml_file_name == "submission.xml.enc"
 
     # Missing xml file name
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_encrypted_submission_file_name(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "encryptedXmlFile element not found in submission.xml"
@@ -395,7 +395,7 @@ def test_extract_form_id(tree_encrypted_ns):
     assert form_id == "test_valigetta"
 
     # Missing form id
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_form_id(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "Form ID not found in submission.xml"
@@ -408,7 +408,7 @@ def test_extract_version(tree_encrypted_ns):
     assert version == "202502131337"
 
     # Missing version
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         extract_version(ET.fromstring(b"<data>hello</data>"))
 
     assert str(exc_info.value) == "version not found in submission.xml"
@@ -499,7 +499,7 @@ def test_decrypt_submission_with_missing_media_file(
     """Decrypt submission with missing files raises an error."""
     fake_encrypted_files.pop("forest.mp4.enc")
 
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         list(
             decrypt_submission(
                 aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
@@ -518,7 +518,7 @@ def test_decrypt_submission_with_missing_submission_file(
     """Decrypt submission with missing submission file raises an error."""
     fake_encrypted_files.pop("submission.xml.enc")
 
-    with pytest.raises(InvalidSubmission) as exc_info:
+    with pytest.raises(InvalidSubmissionException) as exc_info:
         list(
             decrypt_submission(
                 aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files

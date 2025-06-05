@@ -7,15 +7,15 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
-    KMSCreateAliasError,
-    KMSDecryptionError,
-    KMSDeleteAliasError,
+    CreateAliasException,
+    CreateKeyException,
+    DecryptException,
+    DeleteAliasException,
+    DisableKeyException,
+    GetPublicKeyException,
+    InvalidAPIURLException,
     KMSDescribeKeyError,
-    KMSDisableKeyError,
-    KMSGetPublicKeyError,
-    KMSInvalidAPIURLsError,
-    KMSKeyCreationError,
-    KMSUpdateKeyDescriptionError,
+    UpdateKeyDescriptionException,
 )
 from valigetta.kms import APIKMSClient
 
@@ -31,7 +31,7 @@ def test_aws_create_key(aws_kms_client):
     assert parsed_date.tzinfo is not None
 
     # ClientError is handled
-    with pytest.raises(KMSKeyCreationError) as exc_info:
+    with pytest.raises(CreateKeyException) as exc_info:
         aws_kms_client.boto3_client.create_key = Mock()
         aws_kms_client.boto3_client.create_key.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
@@ -41,7 +41,7 @@ def test_aws_create_key(aws_kms_client):
     assert "Failed to create key" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSKeyCreationError) as exc_info:
+    with pytest.raises(CreateKeyException) as exc_info:
         aws_kms_client.boto3_client.create_key = Mock()
         aws_kms_client.boto3_client.create_key.side_effect = BotoCoreError()
         aws_kms_client.create_key(description="Test KMS key")
@@ -65,7 +65,7 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
     assert decrypted_key == plaintext_key
 
     # ClientError is handled
-    with pytest.raises(KMSDecryptionError) as exc_info:
+    with pytest.raises(DecryptException) as exc_info:
         aws_kms_client.boto3_client.decrypt = Mock()
         aws_kms_client.boto3_client.decrypt.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
@@ -75,7 +75,7 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
     assert "Failed to decrypt" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSDecryptionError) as exc_info:
+    with pytest.raises(DecryptException) as exc_info:
         aws_kms_client.boto3_client.decrypt = Mock()
         aws_kms_client.boto3_client.decrypt.side_effect = BotoCoreError()
         aws_kms_client.decrypt(key_id=key_id, ciphertext=encrypted_aes_key)
@@ -94,7 +94,7 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
     )
 
     # ClientError is handled
-    with pytest.raises(KMSGetPublicKeyError) as exc_info:
+    with pytest.raises(GetPublicKeyException) as exc_info:
         aws_kms_client.boto3_client.get_public_key = Mock()
         aws_kms_client.boto3_client.get_public_key.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
@@ -104,7 +104,7 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
     assert "Failed to get public key" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSGetPublicKeyError) as exc_info:
+    with pytest.raises(GetPublicKeyException) as exc_info:
         aws_kms_client.boto3_client.get_public_key = Mock()
         aws_kms_client.boto3_client.get_public_key.side_effect = BotoCoreError()
         aws_kms_client.get_public_key(key_id=aws_kms_key)
@@ -151,7 +151,7 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
     )
 
     # ClientError is handled
-    with pytest.raises(KMSUpdateKeyDescriptionError) as exc_info:
+    with pytest.raises(UpdateKeyDescriptionException) as exc_info:
         aws_kms_client.boto3_client.update_key_description.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -162,7 +162,7 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
     assert "Failed to update key description" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSUpdateKeyDescriptionError) as exc_info:
+    with pytest.raises(UpdateKeyDescriptionException) as exc_info:
         aws_kms_client.boto3_client.update_key_description.side_effect = BotoCoreError()
         aws_kms_client.update_key_description(
             key_id=key_id, description="New description"
@@ -180,7 +180,7 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
     aws_kms_client.boto3_client.disable_key.assert_called_once_with(KeyId=key_id)
 
     # ClientError is handled
-    with pytest.raises(KMSDisableKeyError) as exc_info:
+    with pytest.raises(DisableKeyException) as exc_info:
         aws_kms_client.boto3_client.disable_key.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -189,7 +189,7 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
     assert "Failed to disable key" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSDisableKeyError) as exc_info:
+    with pytest.raises(DisableKeyException) as exc_info:
         aws_kms_client.boto3_client.disable_key.side_effect = BotoCoreError()
         aws_kms_client.disable_key(key_id)
 
@@ -207,7 +207,7 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
     )
 
     # ClientError is handled
-    with pytest.raises(KMSCreateAliasError) as exc_info:
+    with pytest.raises(CreateAliasException) as exc_info:
         aws_kms_client.boto3_client.create_alias.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -216,7 +216,7 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
     assert "Failed to create alias" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSCreateAliasError) as exc_info:
+    with pytest.raises(CreateAliasException) as exc_info:
         aws_kms_client.boto3_client.create_alias.side_effect = BotoCoreError()
         aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
 
@@ -234,7 +234,7 @@ def test_aws_delete_alias(aws_kms_client, aws_kms_key):
     )
 
     # ClientError is handled
-    with pytest.raises(KMSDeleteAliasError) as exc_info:
+    with pytest.raises(DeleteAliasException) as exc_info:
         aws_kms_client.boto3_client.delete_alias.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
         )
@@ -243,7 +243,7 @@ def test_aws_delete_alias(aws_kms_client, aws_kms_key):
     assert "Failed to delete alias" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSDeleteAliasError) as exc_info:
+    with pytest.raises(DeleteAliasException) as exc_info:
         aws_kms_client.boto3_client.delete_alias.side_effect = BotoCoreError()
         aws_kms_client.delete_alias(alias_name=alias_name)
 
@@ -277,7 +277,7 @@ def test_api_create_key(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSKeyCreationError) as exc_info:
+        with pytest.raises(CreateKeyException) as exc_info:
             api_kms_client.create_key(description="Test KMS key")
 
         assert "Failed to create key" in str(exc_info.value)
@@ -311,7 +311,7 @@ def test_api_decrypt(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSDecryptionError) as exc_info:
+        with pytest.raises(DecryptException) as exc_info:
             api_kms_client.decrypt(key_id="test-key-id", ciphertext=ciphertext)
 
         assert "Failed to decrypt" in str(exc_info.value)
@@ -338,7 +338,7 @@ def test_api_get_public_key(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSGetPublicKeyError) as exc_info:
+        with pytest.raises(GetPublicKeyException) as exc_info:
             api_kms_client.get_public_key(key_id="test-key-id")
 
         assert "Failed to get public key" in str(exc_info.value)
@@ -399,7 +399,7 @@ def test_api_update_key_description(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSUpdateKeyDescriptionError) as exc_info:
+        with pytest.raises(UpdateKeyDescriptionException) as exc_info:
             api_kms_client.update_key_description(
                 key_id="test-key-id", description="New description"
             )
@@ -426,7 +426,7 @@ def test_api_disable_key(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSDisableKeyError) as exc_info:
+        with pytest.raises(DisableKeyException) as exc_info:
             api_kms_client.disable_key(key_id="test-key-id")
 
         assert "Failed to disable key" in str(exc_info.value)
@@ -452,7 +452,7 @@ def test_api_create_alias(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSCreateAliasError) as exc_info:
+        with pytest.raises(CreateAliasException) as exc_info:
             api_kms_client.create_alias(alias_name="test-alias", key_id="test-key-id")
 
         assert "Failed to create alias" in str(exc_info.value)
@@ -576,7 +576,7 @@ def test_api_refresh_token_failure(api_kms_client):
 
 def test_api_invalid_urls():
     """APIKMSClient raises an error if invalid URLs are provided."""
-    with pytest.raises(KMSInvalidAPIURLsError) as exc_info:
+    with pytest.raises(InvalidAPIURLException) as exc_info:
         APIKMSClient(
             client_id="test-client-id",
             client_secret="test-client-secret",
@@ -608,7 +608,7 @@ def test_api_invalid_urls():
 
 def test_api_missing_urls():
     """APIKMSClient raises an error if required URLs are missing."""
-    with pytest.raises(KMSInvalidAPIURLsError) as exc_info:
+    with pytest.raises(InvalidAPIURLException) as exc_info:
         APIKMSClient(
             client_id="test-client-id", client_secret="test-client-secret", urls={}
         )
