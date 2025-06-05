@@ -66,3 +66,9 @@ class KMSUnauthorizedError(KMSClientError):
     """Raised when authentication fails permanently (e.g., bad credentials)."""
 
     pass
+
+
+class KMSInvalidAPIURLsError(KMSClientError):
+    """Raised when invalid API URLs are provided."""
+
+    pass

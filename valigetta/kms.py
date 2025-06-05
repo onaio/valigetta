@@ -16,6 +16,7 @@ from valigetta.exceptions import (
     KMSDescribeKeyError,
     KMSDisableKeyError,
     KMSGetPublicKeyError,
+    KMSInvalidAPIURLsError,
     KMSKeyCreationError,
     KMSTokenError,
     KMSUnauthorizedError,
@@ -259,7 +260,7 @@ class APIKMSClient(KMSClient):
                 errors[url_key] = f"Invalid value '{self.urls[url_key]}'"
 
         if errors:
-            raise KMSClientError(errors)
+            raise KMSInvalidAPIURLsError(errors)
 
     def _get_token(self) -> dict:
         """Get a token for the API client"""

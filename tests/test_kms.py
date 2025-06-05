@@ -7,13 +7,13 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
-    KMSClientError,
     KMSCreateAliasError,
     KMSDecryptionError,
     KMSDeleteAliasError,
     KMSDescribeKeyError,
     KMSDisableKeyError,
     KMSGetPublicKeyError,
+    KMSInvalidAPIURLsError,
     KMSKeyCreationError,
     KMSUpdateKeyDescriptionError,
 )
@@ -576,7 +576,7 @@ def test_api_refresh_token_failure(api_kms_client):
 
 def test_api_invalid_urls():
     """APIKMSClient raises an error if invalid URLs are provided."""
-    with pytest.raises(KMSClientError) as exc_info:
+    with pytest.raises(KMSInvalidAPIURLsError) as exc_info:
         APIKMSClient(
             client_id="test-client-id",
             client_secret="test-client-secret",
@@ -608,7 +608,7 @@ def test_api_invalid_urls():
 
 def test_api_missing_urls():
     """APIKMSClient raises an error if required URLs are missing."""
-    with pytest.raises(KMSClientError) as exc_info:
+    with pytest.raises(KMSInvalidAPIURLsError) as exc_info:
         APIKMSClient(
             client_id="test-client-id", client_secret="test-client-secret", urls={}
         )
