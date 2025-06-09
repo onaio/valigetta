@@ -9,6 +9,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
+    AliasAlreadyExistsException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -190,6 +191,8 @@ class AWSKMSClient(KMSClient):
         """
         try:
             self.boto3_client.create_alias(AliasName=alias_name, TargetKeyId=key_id)
+        except self.boto3_client.exceptions.AlreadyExistsException as exc:
+            raise AliasAlreadyExistsException("Alias already exists") from exc
         except (BotoCoreError, ClientError) as exc:
             raise CreateAliasException("Failed to create alias") from exc
 
