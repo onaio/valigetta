@@ -7,6 +7,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
+    AliasAlreadyExistsException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -221,6 +222,23 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
         aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
 
     assert "Failed to create alias" in str(exc_info.value)
+
+    # AlreadyExistsException is handled
+    with pytest.raises(AliasAlreadyExistsException) as exc_info:
+        aws_kms_client.boto3_client.create_alias.side_effect = (
+            aws_kms_client.boto3_client.exceptions.AlreadyExistsException(
+                {
+                    "Error": {
+                        "Code": "AlreadyExistsException",
+                        "Message": "Alias already exists",
+                    }
+                },
+                operation_name="CreateAlias",
+            )
+        )
+        aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
+
+    assert "Alias already exists" in str(exc_info.value)
 
 
 def test_aws_delete_alias(aws_kms_client, aws_kms_key):

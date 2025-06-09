@@ -52,6 +52,12 @@ class CreateAliasException(KMSClientException):
     pass
 
 
+class AliasAlreadyExistsException(CreateAliasException):
+    """Raised when an alias already exists."""
+
+    pass
+
+
 class DeleteAliasException(KMSClientException):
     """Raised when deleting an alias for a KMS key fails."""
 
