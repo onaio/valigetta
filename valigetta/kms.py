@@ -286,7 +286,7 @@ class APIKMSClient(KMSClient):
             raise InvalidAPIURLException(errors)
 
     def get_token(self) -> dict:
-        """Get a token for the API client"""
+        """Get authentication token."""
         try:
             response = requests.post(
                 self._urls[self.__class__.URL_TOKEN_KEY],
@@ -302,7 +302,7 @@ class APIKMSClient(KMSClient):
             raise TokenException("Failed to get token") from exc
 
     def refresh_access_token(self) -> dict:
-        """Refresh the token for the API client"""
+        """Refresh authentication token."""
         try:
             response = requests.post(
                 self._urls[self.__class__.URL_TOKEN_REFRESH_KEY],
