@@ -1,7 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Callable
 from urllib.parse import urlparse
 
 import boto3
@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
+    AuthenticationException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -19,8 +20,6 @@ from valigetta.exceptions import (
     InvalidAPIURLException,
     KMSClientException,
     KMSDescribeKeyError,
-    TokenException,
-    UnauthorizedException,
     UpdateKeyDescriptionException,
 )
 from valigetta.utils import der_public_key_to_pem
@@ -32,7 +31,7 @@ class KMSClient(ABC):
     """Abstract Base Class for KMS Clients."""
 
     @abstractmethod
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create an encryption key."""
         raise NotImplementedError("Subclasses must implement create_key method.")
 
@@ -74,9 +73,9 @@ class AWSKMSClient(KMSClient):
 
     def __init__(
         self,
-        aws_access_key_id: Optional[str] = None,
-        aws_secret_access_key: Optional[str] = None,
-        region_name: Optional[str] = None,
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
+        region_name: str | None = None,
     ):
         self.boto3_client = boto3.client(
             "kms",
@@ -85,7 +84,7 @@ class AWSKMSClient(KMSClient):
             region_name=region_name,
         )
 
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
 
         :param description: A description of the KMS key. Do not include
@@ -233,67 +232,102 @@ class APIKMSClient(KMSClient):
         ]
     )
 
-    def __init__(self, client_id: str, client_secret: str, urls: dict[str, str]):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        urls: dict[str, str],
+        token: dict | None = None,
+        on_token_refresh: Callable[[dict], None] | None = None,
+    ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.urls = urls
+        self.token = token or {}
+        self._on_token_refresh = on_token_refresh
 
-        self._validate_urls()
-        data = self._get_token()
+        if not self.token:
+            self.get_token()
 
-        self._access_token = data["access"]
-        self._refresh_token = data["refresh"]
+    @property
+    def urls(self) -> dict[str, str]:
+        """Getter for urls"""
+        return self._urls
 
-    def _is_valid_url(self, url: str) -> bool:
+    @urls.setter
+    def urls(self, urls: dict[str, str]):
+        """Setter for urls"""
+        self._validate_urls(urls)
+        self._urls = urls
+
+    @property
+    def access_token(self):
+        return self.token.get("access")
+
+    @property
+    def refresh_token(self):
+        return self.token.get("refresh")
+
+    def _is_url_valid(self, url: str) -> bool:
         try:
             parsed = urlparse(url)
             return all([parsed.scheme, parsed.netloc])
         except Exception:
             return False
 
-    def _validate_urls(self):
-        """Validate the URLs for the API client"""
+    def _validate_urls(self, urls: dict[str, str]) -> None:
         errors = {}
 
-        for url_key in self.URL_KEYS:
-            if url_key not in self.urls:
-                errors[url_key] = "URL is required"
-
-            elif not self._is_valid_url(self.urls[url_key]):
-                errors[url_key] = f"Invalid value '{self.urls[url_key]}'"
-
+        for key in self.URL_KEYS:
+            if key not in urls:
+                errors[key] = "URL is required"
+            elif not self._is_url_valid(urls[key]):
+                errors[key] = f"Invalid value '{urls[key]}'"
         if errors:
             raise InvalidAPIURLException(errors)
 
-    def _get_token(self) -> dict:
-        """Get a token for the API client"""
+    def get_token(self) -> dict:
+        """Get authentication token."""
         try:
             response = requests.post(
                 self.urls[self.__class__.URL_TOKEN_KEY],
                 data={"client_id": self.client_id, "client_secret": self.client_secret},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            self.token = data
+
+            if self._on_token_refresh:
+                self._on_token_refresh(data)
+
+            return data
 
         except requests.RequestException as exc:
-            raise TokenException("Failed to get token") from exc
+            raise AuthenticationException("Failed to get token") from exc
 
-    def _refresh_access_token(self) -> dict:
-        """Refresh the token for the API client"""
+    def refresh_access_token(self) -> dict:
+        """Refresh authentication token."""
         try:
             response = requests.post(
                 self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
-                data={"refresh": self._refresh_token},
+                data={"refresh": self.refresh_token},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            self.token["access"] = data["access"]
+            self.token["refresh"] = data.get("refresh", self.refresh_token)
+
+            if self._on_token_refresh:
+                self._on_token_refresh(self.token)
+
+            return data
 
         except requests.RequestException as exc:
-            raise TokenException("Failed to refresh token") from exc
+            raise AuthenticationException("Failed to refresh token") from exc
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         headers = kwargs.pop("headers", {}).copy()
-        headers["Authorization"] = f"Bearer {self._access_token}"
+        headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
 
         response = requests.request(method, url, **kwargs)
@@ -301,20 +335,17 @@ class APIKMSClient(KMSClient):
         # Handle 401 Unauthorized: try refresh token, then retry once
         if response.status_code == 401:
             try:
-                data = self._refresh_access_token()
-                self._access_token = data["access"]
-            except TokenException:
+                self.refresh_access_token()
+            except AuthenticationException:
                 # If refresh token fails, try to get a new token
                 try:
-                    data = self._get_token()
-                    self._access_token = data["access"]
-                    self._refresh_token = data["refresh"]
-                except TokenException as exc:
-                    raise UnauthorizedException("Re-authentication failed") from exc
+                    self.get_token()
+                except AuthenticationException as exc:
+                    raise AuthenticationException("Failed to re-authenticate") from exc
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
-            headers["Authorization"] = f"Bearer {self._access_token}"
+            headers["Authorization"] = f"Bearer {self.access_token}"
             kwargs["headers"] = headers
 
             response = requests.request(method, url, **kwargs)
@@ -326,7 +357,7 @@ class APIKMSClient(KMSClient):
 
         return response
 
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
 
         :param description: A description of the KMS key. Do not include

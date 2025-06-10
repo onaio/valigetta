@@ -489,8 +489,8 @@ def test_api_get_token(api_kms_client_urls):
             urls=api_kms_client_urls,
         )
 
-    assert client._access_token == "test-token"
-    assert client._refresh_token == "test-refresh-token"
+    assert client.access_token == "test-token"
+    assert client.refresh_token == "test-refresh-token"
 
     mock_post.assert_called_once_with(
         "http://localhost:8000/token",
@@ -540,19 +540,29 @@ def test_api_refresh_token(api_kms_client):
         ]
         mock_request.assert_has_calls(calls)
 
-    assert api_kms_client._access_token == "new-token"
+    assert api_kms_client.access_token == "new-token"
 
 
 def test_api_refresh_token_failure(api_kms_client):
     """New token is requested if refresh token fails."""
-    with patch("requests.post") as mock_post, patch(
-        "requests.request"
-    ) as mock_request, patch("valigetta.kms.APIKMSClient._get_token") as mock_get_token:
-        mock_post.side_effect = requests.HTTPError(response=Mock(status_code=401))
-        mock_get_token.return_value = {
+    with patch("requests.post") as mock_post, patch("requests.request") as mock_request:
+        # Mock the /token/refresh call to fail
+        unauthorized_response = Mock(spec=requests.Response)
+        unauthorized_response.status_code = 401
+        unauthorized_response.raise_for_status.side_effect = requests.HTTPError(
+            response=unauthorized_response
+        )
+        # Mock the /token call to return a new access token
+        token_response = Mock(spec=requests.Response)
+        token_response.status_code = 200
+        token_response.json.return_value = {
             "access": "new-token",
             "refresh": "new-refresh-token",
         }
+        token_response.raise_for_status.return_value = None
+
+        mock_post.side_effect = [unauthorized_response, token_response]
+
         # Mock the /keys/test-key-id
         # First one returns 401
         mock_401 = Mock()
@@ -568,28 +578,41 @@ def test_api_refresh_token_failure(api_kms_client):
 
         api_kms_client.get_public_key(key_id="test-key-id")
 
-        mock_post.assert_called_once_with(
-            "http://localhost:8000/token/refresh",
-            data={"refresh": "test-refresh-token"},
+        # Refresh token fails, then a new token is requested
+        mock_post.assert_has_calls(
+            [
+                call(
+                    "http://localhost:8000/token/refresh",
+                    data={"refresh": "test-refresh-token"},
+                ),
+                call(
+                    "http://localhost:8000/token",
+                    data={
+                        "client_id": "test-client-id",
+                        "client_secret": "test-client-secret",
+                    },
+                ),
+            ]
+        )
+        # Get public key is called twice: once with the old token,
+        # once with the new one
+        mock_request.assert_has_calls(
+            [
+                call(
+                    "GET",
+                    "http://localhost:8000/keys/test-key-id",
+                    headers={"Authorization": "Bearer test-token"},
+                ),
+                call(
+                    "GET",
+                    "http://localhost:8000/keys/test-key-id",
+                    headers={"Authorization": "Bearer new-token"},
+                ),
+            ]
         )
 
-        # Get public key is called twice: once before get token, once after
-        calls = [
-            call(
-                "GET",
-                "http://localhost:8000/keys/test-key-id",
-                headers={"Authorization": "Bearer test-token"},
-            ),
-            call(
-                "GET",
-                "http://localhost:8000/keys/test-key-id",
-                headers={"Authorization": "Bearer new-token"},
-            ),
-        ]
-        mock_request.assert_has_calls(calls)
-
-    assert api_kms_client._access_token == "new-token"
-    assert api_kms_client._refresh_token == "new-refresh-token"
+    assert api_kms_client.access_token == "new-token"
+    assert api_kms_client.refresh_token == "new-refresh-token"
 
 
 def test_api_invalid_urls():
@@ -642,3 +665,54 @@ def test_api_missing_urls():
     assert errors["update_key_description"] == "URL is required"
     assert errors["disable_key"] == "URL is required"
     assert errors["create_alias"] == "URL is required"
+
+
+def test_cb_on_new_token(api_kms_client_urls):
+    """Callback is called when a new token is requested."""
+    mock_cb = Mock()
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.json.return_value = {
+        "access": "new-token",
+        "refresh": "new-refresh-token",
+    }
+    response.raise_for_status.return_value = None
+
+    with patch("requests.post", return_value=response):
+        client = APIKMSClient(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            urls=api_kms_client_urls,
+            on_token_refresh=mock_cb,
+            token={"access": "test-token", "refresh": "test-refresh-token"},
+        )
+        client.get_token()
+        mock_cb.assert_called_once_with(
+            {"access": "new-token", "refresh": "new-refresh-token"}
+        )
+
+
+def test_cb_on_refresh_token(api_kms_client_urls):
+    """Callback is called when a refresh token is requested."""
+    mock_cb = Mock()
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.json.return_value = {
+        "access": "new-token",
+        "refresh": "new-refresh-token",
+    }
+    response.raise_for_status.return_value = None
+
+    with patch("requests.post", return_value=response):
+        client = APIKMSClient(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            urls=api_kms_client_urls,
+            on_token_refresh=mock_cb,
+            token={"access": "test-token", "refresh": "test-refresh-token"},
+        )
+        client.refresh_access_token()
+
+        mock_cb.assert_called_once_with(
+            {"access": "new-token", "refresh": "new-refresh-token"}
+        )

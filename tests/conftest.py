@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 import boto3
 import pytest
 from moto import mock_aws
@@ -48,15 +46,12 @@ def api_kms_client_urls():
 @pytest.fixture
 def api_kms_client(api_kms_client_urls):
     """Fixture to provide a KMSClient instance with mocked credentials."""
-    # Mock the _get_token method
-    with patch("valigetta.kms.APIKMSClient._get_token") as mock_get_token:
-        mock_get_token.return_value = {
+    yield APIKMSClient(
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        urls=api_kms_client_urls,
+        token={
             "access": "test-token",
             "refresh": "test-refresh-token",
-        }
-
-        yield APIKMSClient(
-            client_id="test-client-id",
-            client_secret="test-client-secret",
-            urls=api_kms_client_urls,
-        )
+        },
+    )
