@@ -291,7 +291,7 @@ class APIKMSClient(KMSClient):
         """Get authentication token."""
         try:
             response = requests.post(
-                self._urls[self.__class__.URL_TOKEN_KEY],
+                self.urls[self.__class__.URL_TOKEN_KEY],
                 data={"client_id": self.client_id, "client_secret": self.client_secret},
             )
             response.raise_for_status()
@@ -310,7 +310,7 @@ class APIKMSClient(KMSClient):
         """Refresh authentication token."""
         try:
             response = requests.post(
-                self._urls[self.__class__.URL_TOKEN_REFRESH_KEY],
+                self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
                 data={"refresh": self.refresh_token},
             )
             response.raise_for_status()
@@ -368,7 +368,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self._urls[self.__class__.URL_CREATE_KEY],
+                self.urls[self.__class__.URL_CREATE_KEY],
                 json={"description": description},
             )
         except KMSClientException as exc:
@@ -388,7 +388,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self._urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
+                self.urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
                 json={"ciphertext": ciphertext_base64},
             )
         except KMSClientException as exc:
@@ -407,7 +407,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "GET",
-                self._urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
+                self.urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise GetPublicKeyException("Failed to get public key") from exc
@@ -423,7 +423,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "GET",
-                self._urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
+                self.urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise KMSDescribeKeyError("Failed to describe key") from exc
@@ -439,7 +439,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "PATCH",
-                self._urls[self.__class__.URL_UPDATE_KEY_DESCRIPTION_KEY].format(
+                self.urls[self.__class__.URL_UPDATE_KEY_DESCRIPTION_KEY].format(
                     key_id=key_id
                 ),
                 json={"description": description},
@@ -459,7 +459,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self._urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
+                self.urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise DisableKeyException("Failed to disable key") from exc
@@ -475,7 +475,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "PATCH",
-                self._urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
+                self.urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
                 json={"alias": alias_name},
             )
         except KMSClientException as exc:
