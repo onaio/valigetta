@@ -311,6 +311,7 @@ class APIKMSClient(KMSClient):
             response.raise_for_status()
             data = response.json()
             self.token["access"] = data["access"]
+            self.token["refresh"] = data.get("refresh", self.refresh_token)
 
             return data
 
