@@ -64,14 +64,8 @@ class DeleteAliasException(KMSClientException):
     pass
 
 
-class TokenException(KMSClientException):
-    """Raised when token acquisition or refresh fails."""
-
-    pass
-
-
-class UnauthorizedException(KMSClientException):
-    """Raised when authentication fails permanently (e.g., bad credentials)."""
+class AuthenticationException(KMSClientException):
+    """Raised when authentication fails."""
 
     pass
 

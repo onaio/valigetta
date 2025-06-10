@@ -10,6 +10,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
+    AuthenticationException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -19,8 +20,6 @@ from valigetta.exceptions import (
     InvalidAPIURLException,
     KMSClientException,
     KMSDescribeKeyError,
-    TokenException,
-    UnauthorizedException,
     UpdateKeyDescriptionException,
 )
 from valigetta.utils import der_public_key_to_pem
@@ -304,7 +303,7 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.RequestException as exc:
-            raise TokenException("Failed to get token") from exc
+            raise AuthenticationException("Failed to get token") from exc
 
     def refresh_access_token(self) -> dict:
         """Refresh authentication token."""
@@ -324,7 +323,7 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.RequestException as exc:
-            raise TokenException("Failed to refresh token") from exc
+            raise AuthenticationException("Failed to refresh token") from exc
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         headers = kwargs.pop("headers", {}).copy()
@@ -337,12 +336,12 @@ class APIKMSClient(KMSClient):
         if response.status_code == 401:
             try:
                 self.refresh_access_token()
-            except TokenException:
+            except AuthenticationException:
                 # If refresh token fails, try to get a new token
                 try:
                     self.get_token()
-                except TokenException as exc:
-                    raise UnauthorizedException("Re-authentication failed") from exc
+                except AuthenticationException as exc:
+                    raise AuthenticationException("Failed to re-authenticate") from exc
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
