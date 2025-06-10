@@ -1,7 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Callable
 from urllib.parse import urlparse
 
 import boto3
@@ -32,7 +32,7 @@ class KMSClient(ABC):
     """Abstract Base Class for KMS Clients."""
 
     @abstractmethod
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create an encryption key."""
         raise NotImplementedError("Subclasses must implement create_key method.")
 
@@ -74,9 +74,9 @@ class AWSKMSClient(KMSClient):
 
     def __init__(
         self,
-        aws_access_key_id: Optional[str] = None,
-        aws_secret_access_key: Optional[str] = None,
-        region_name: Optional[str] = None,
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
+        region_name: str | None = None,
     ):
         self.boto3_client = boto3.client(
             "kms",
@@ -85,7 +85,7 @@ class AWSKMSClient(KMSClient):
             region_name=region_name,
         )
 
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
 
         :param description: A description of the KMS key. Do not include
@@ -239,11 +239,13 @@ class APIKMSClient(KMSClient):
         client_secret: str,
         urls: dict[str, str],
         token: dict | None = None,
+        on_token_refresh: Callable[[dict], None] | None = None,
     ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.urls = urls
         self.token = token or {}
+        self._on_token_refresh = on_token_refresh
 
         if not self.token:
             self.get_token()
@@ -296,6 +298,9 @@ class APIKMSClient(KMSClient):
             data = response.json()
             self.token = data
 
+            if self._on_token_refresh:
+                self._on_token_refresh(data)
+
             return data
 
         except requests.RequestException as exc:
@@ -312,6 +317,9 @@ class APIKMSClient(KMSClient):
             data = response.json()
             self.token["access"] = data["access"]
             self.token["refresh"] = data.get("refresh", self.refresh_token)
+
+            if self._on_token_refresh:
+                self._on_token_refresh(self.token)
 
             return data
 
@@ -350,7 +358,7 @@ class APIKMSClient(KMSClient):
 
         return response
 
-    def create_key(self, description: Optional[str] = None) -> dict:
+    def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
 
         :param description: A description of the KMS key. Do not include

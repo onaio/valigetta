@@ -665,3 +665,52 @@ def test_api_missing_urls():
     assert errors["update_key_description"] == "URL is required"
     assert errors["disable_key"] == "URL is required"
     assert errors["create_alias"] == "URL is required"
+
+
+def test_cb_on_new_token(api_kms_client_urls):
+    """Callback is called when a new token is requested."""
+    mock_cb = Mock()
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.json.return_value = {
+        "access": "test-token",
+        "refresh": "test-refresh-token",
+    }
+    response.raise_for_status.return_value = None
+
+    with patch("requests.post", return_value=response):
+        APIKMSClient(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            urls=api_kms_client_urls,
+            on_token_refresh=mock_cb,
+        )
+        mock_cb.assert_called_once_with(
+            {"access": "test-token", "refresh": "test-refresh-token"}
+        )
+
+
+def test_cb_on_refresh_token(api_kms_client_urls):
+    """Callback is called when a refresh token is requested."""
+    mock_cb = Mock()
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.json.return_value = {
+        "access": "new-token",
+        "refresh": "new-refresh-token",
+    }
+    response.raise_for_status.return_value = None
+
+    with patch("requests.post", return_value=response):
+        client = APIKMSClient(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            urls=api_kms_client_urls,
+            on_token_refresh=mock_cb,
+            token={"access": "test-token", "refresh": "test-refresh-token"},
+        )
+        client.refresh_access_token()
+
+        mock_cb.assert_called_once_with(
+            {"access": "new-token", "refresh": "new-refresh-token"}
+        )
