@@ -673,20 +673,22 @@ def test_cb_on_new_token(api_kms_client_urls):
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.json.return_value = {
-        "access": "test-token",
-        "refresh": "test-refresh-token",
+        "access": "new-token",
+        "refresh": "new-refresh-token",
     }
     response.raise_for_status.return_value = None
 
     with patch("requests.post", return_value=response):
-        APIKMSClient(
+        client = APIKMSClient(
             client_id="test-client-id",
             client_secret="test-client-secret",
             urls=api_kms_client_urls,
             on_token_refresh=mock_cb,
+            token={"access": "test-token", "refresh": "test-refresh-token"},
         )
+        client.get_token()
         mock_cb.assert_called_once_with(
-            {"access": "test-token", "refresh": "test-refresh-token"}
+            {"access": "new-token", "refresh": "new-refresh-token"}
         )
 
 
