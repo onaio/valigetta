@@ -233,67 +233,93 @@ class APIKMSClient(KMSClient):
         ]
     )
 
-    def __init__(self, client_id: str, client_secret: str, urls: dict[str, str]):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        urls: dict[str, str],
+        token: dict | None = None,
+    ):
         self.client_id = client_id
         self.client_secret = client_secret
         self.urls = urls
+        self.token = token or {}
 
-        self._validate_urls()
-        data = self._get_token()
+        if not self.token:
+            self.get_token()
 
-        self._access_token = data["access"]
-        self._refresh_token = data["refresh"]
+    @property
+    def urls(self) -> dict[str, str]:
+        """Getter for urls"""
+        return self._urls
 
-    def _is_valid_url(self, url: str) -> bool:
+    @urls.setter
+    def urls(self, urls: dict[str, str]):
+        """Setter for urls"""
+        self._validate_urls(urls)
+        self._urls = urls
+
+    @property
+    def access_token(self):
+        return self.token.get("access")
+
+    @property
+    def refresh_token(self):
+        return self.token.get("refresh")
+
+    def _is_url_valid(self, url: str) -> bool:
         try:
             parsed = urlparse(url)
             return all([parsed.scheme, parsed.netloc])
         except Exception:
             return False
 
-    def _validate_urls(self):
-        """Validate the URLs for the API client"""
+    def _validate_urls(self, urls: dict[str, str]) -> None:
         errors = {}
 
-        for url_key in self.URL_KEYS:
-            if url_key not in self.urls:
-                errors[url_key] = "URL is required"
-
-            elif not self._is_valid_url(self.urls[url_key]):
-                errors[url_key] = f"Invalid value '{self.urls[url_key]}'"
-
+        for key in self.URL_KEYS:
+            if key not in urls:
+                errors[key] = "URL is required"
+            elif not self._is_url_valid(urls[key]):
+                errors[key] = f"Invalid value '{urls[key]}'"
         if errors:
             raise InvalidAPIURLException(errors)
 
-    def _get_token(self) -> dict:
+    def get_token(self) -> dict:
         """Get a token for the API client"""
         try:
             response = requests.post(
-                self.urls[self.__class__.URL_TOKEN_KEY],
+                self._urls[self.__class__.URL_TOKEN_KEY],
                 data={"client_id": self.client_id, "client_secret": self.client_secret},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            self.token = data
+
+            return data
 
         except requests.RequestException as exc:
             raise TokenException("Failed to get token") from exc
 
-    def _refresh_access_token(self) -> dict:
+    def refresh_access_token(self) -> dict:
         """Refresh the token for the API client"""
         try:
             response = requests.post(
-                self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
-                data={"refresh": self._refresh_token},
+                self._urls[self.__class__.URL_TOKEN_REFRESH_KEY],
+                data={"refresh": self.refresh_token},
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            self.token["access"] = data["access"]
+
+            return data
 
         except requests.RequestException as exc:
             raise TokenException("Failed to refresh token") from exc
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         headers = kwargs.pop("headers", {}).copy()
-        headers["Authorization"] = f"Bearer {self._access_token}"
+        headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
 
         response = requests.request(method, url, **kwargs)
@@ -301,20 +327,17 @@ class APIKMSClient(KMSClient):
         # Handle 401 Unauthorized: try refresh token, then retry once
         if response.status_code == 401:
             try:
-                data = self._refresh_access_token()
-                self._access_token = data["access"]
+                self.refresh_access_token()
             except TokenException:
                 # If refresh token fails, try to get a new token
                 try:
-                    data = self._get_token()
-                    self._access_token = data["access"]
-                    self._refresh_token = data["refresh"]
+                    self.get_token()
                 except TokenException as exc:
                     raise UnauthorizedException("Re-authentication failed") from exc
 
             # Retry the request once after token refresh
             headers = kwargs.get("headers", {}).copy()
-            headers["Authorization"] = f"Bearer {self._access_token}"
+            headers["Authorization"] = f"Bearer {self.access_token}"
             kwargs["headers"] = headers
 
             response = requests.request(method, url, **kwargs)
@@ -336,7 +359,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self.urls[self.__class__.URL_CREATE_KEY],
+                self._urls[self.__class__.URL_CREATE_KEY],
                 json={"description": description},
             )
         except KMSClientException as exc:
@@ -356,7 +379,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self.urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
+                self._urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
                 json={"ciphertext": ciphertext_base64},
             )
         except KMSClientException as exc:
@@ -375,7 +398,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "GET",
-                self.urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
+                self._urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise GetPublicKeyException("Failed to get public key") from exc
@@ -391,7 +414,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "GET",
-                self.urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
+                self._urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise KMSDescribeKeyError("Failed to describe key") from exc
@@ -407,7 +430,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "PATCH",
-                self.urls[self.__class__.URL_UPDATE_KEY_DESCRIPTION_KEY].format(
+                self._urls[self.__class__.URL_UPDATE_KEY_DESCRIPTION_KEY].format(
                     key_id=key_id
                 ),
                 json={"description": description},
@@ -427,7 +450,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "POST",
-                self.urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
+                self._urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
             raise DisableKeyException("Failed to disable key") from exc
@@ -443,7 +466,7 @@ class APIKMSClient(KMSClient):
         try:
             response = self._request(
                 "PATCH",
-                self.urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
+                self._urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
                 json={"alias": alias_name},
             )
         except KMSClientException as exc:
