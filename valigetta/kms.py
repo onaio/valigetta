@@ -347,16 +347,18 @@ class APIKMSClient(KMSClient):
 
             if response.status_code == 401:
                 try:
-                    self.refresh_access_token()
+                    self.refresh_access_token()  # Try to refresh the access token
                 except AuthenticationException:
+                    # Refresh token expired, authenticate again
                     try:
                         self.get_token()
                     except AuthenticationException as exc:
+                        # Authentication failed, raise an error
                         raise AuthenticationException(
                             "Failed to re-authenticate"
                         ) from exc
 
-                # Retry once after refreshing the token
+                # Refresh token succeeded, retry the request
                 headers = kwargs.get("headers", {}).copy()
                 headers["Authorization"] = f"Bearer {self.access_token}"
                 kwargs["headers"] = headers
