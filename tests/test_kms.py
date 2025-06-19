@@ -13,11 +13,11 @@ from valigetta.exceptions import (
     CreateKeyException,
     DecryptException,
     DeleteAliasException,
+    DescribeKeyException,
     DisableKeyException,
     GetPublicKeyException,
     InvalidAPIURLException,
     KMSClientException,
-    KMSDescribeKeyError,
     UpdateKeyDescriptionException,
 )
 from valigetta.kms import APIKMSClient
@@ -125,7 +125,7 @@ def test_aws_describe_key(aws_kms_client, aws_kms_key):
     assert "enabled" in response
 
     # ClientError is handled
-    with pytest.raises(KMSDescribeKeyError) as exc_info:
+    with pytest.raises(DescribeKeyException) as exc_info:
         aws_kms_client.boto3_client.describe_key = Mock()
         aws_kms_client.boto3_client.describe_key.side_effect = ClientError(
             {"Error": {"Code": "test-error"}}, "test-error"
@@ -135,7 +135,7 @@ def test_aws_describe_key(aws_kms_client, aws_kms_key):
     assert "Failed to describe key" in str(exc_info.value)
 
     # BotoCoreError is handled
-    with pytest.raises(KMSDescribeKeyError) as exc_info:
+    with pytest.raises(DescribeKeyException) as exc_info:
         aws_kms_client.boto3_client.describe_key = Mock()
         aws_kms_client.boto3_client.describe_key.side_effect = BotoCoreError()
         aws_kms_client.describe_key(key_id=aws_kms_key)
@@ -391,7 +391,7 @@ def test_api_describe_key(api_kms_client):
     )
 
     with patch("requests.request", return_value=mock_response) as mock_request:
-        with pytest.raises(KMSDescribeKeyError) as exc_info:
+        with pytest.raises(DescribeKeyException) as exc_info:
             api_kms_client.describe_key(key_id="test-key-id")
 
         assert "Failed to describe key" in str(exc_info.value)

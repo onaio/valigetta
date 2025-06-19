@@ -15,11 +15,11 @@ from valigetta.exceptions import (
     CreateKeyException,
     DecryptException,
     DeleteAliasException,
+    DescribeKeyException,
     DisableKeyException,
     GetPublicKeyException,
     InvalidAPIURLException,
     KMSClientException,
-    KMSDescribeKeyError,
     UpdateKeyDescriptionException,
 )
 from valigetta.utils import der_public_key_to_pem
@@ -146,7 +146,7 @@ class AWSKMSClient(KMSClient):
         try:
             response = self.boto3_client.describe_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise KMSDescribeKeyError("Failed to describe key") from exc
+            raise DescribeKeyException("Failed to describe key") from exc
 
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
@@ -445,7 +445,7 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
             )
         except KMSClientException as exc:
-            raise KMSDescribeKeyError("Failed to describe key") from exc
+            raise DescribeKeyException("Failed to describe key") from exc
 
         return response.json()
 

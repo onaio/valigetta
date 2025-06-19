@@ -28,7 +28,7 @@ class GetPublicKeyException(KMSClientException):
     pass
 
 
-class KMSDescribeKeyError(KMSClientException):
+class DescribeKeyException(KMSClientException):
     """Raised when describing a KMS key fails."""
 
     pass
