@@ -302,6 +302,12 @@ class APIKMSClient(KMSClient):
 
             return data
 
+        except requests.HTTPError as exc:
+            response = exc.response
+            raise AuthenticationException(
+                f"Failed to get token: {response.status_code} - {response.text}"
+            ) from exc
+
         except requests.RequestException as exc:
             raise AuthenticationException("Failed to get token") from exc
 
@@ -322,6 +328,12 @@ class APIKMSClient(KMSClient):
 
             return data
 
+        except requests.HTTPError as exc:
+            response = exc.response
+            raise AuthenticationException(
+                f"Failed to refresh token: {response.status_code} - {response.text}"
+            ) from exc
+
         except requests.RequestException as exc:
             raise AuthenticationException("Failed to refresh token") from exc
 
@@ -330,32 +342,38 @@ class APIKMSClient(KMSClient):
         headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
 
-        response = requests.request(method, url, **kwargs)
-
-        # Handle 401 Unauthorized: try refresh token, then retry once
-        if response.status_code == 401:
-            try:
-                self.refresh_access_token()
-            except AuthenticationException:
-                # If refresh token fails, try to get a new token
-                try:
-                    self.get_token()
-                except AuthenticationException as exc:
-                    raise AuthenticationException("Failed to re-authenticate") from exc
-
-            # Retry the request once after token refresh
-            headers = kwargs.get("headers", {}).copy()
-            headers["Authorization"] = f"Bearer {self.access_token}"
-            kwargs["headers"] = headers
-
+        try:
             response = requests.request(method, url, **kwargs)
 
-        try:
+            if response.status_code == 401:
+                try:
+                    self.refresh_access_token()
+                except AuthenticationException:
+                    try:
+                        self.get_token()
+                    except AuthenticationException as exc:
+                        raise AuthenticationException(
+                            "Failed to re-authenticate"
+                        ) from exc
+
+                # Retry once after refreshing the token
+                headers = kwargs.get("headers", {}).copy()
+                headers["Authorization"] = f"Bearer {self.access_token}"
+                kwargs["headers"] = headers
+
+                response = requests.request(method, url, **kwargs)
+
             response.raise_for_status()
+            return response
+
+        except requests.HTTPError as exc:
+            response = exc.response
+            raise KMSClientException(
+                f"Request to {url} failed: {response.status_code} - {response.text}"
+            ) from exc
+
         except requests.RequestException as exc:
             raise KMSClientException(f"Request to {url} failed") from exc
-
-        return response
 
     def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
