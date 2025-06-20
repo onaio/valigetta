@@ -305,7 +305,7 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            http_err_msg = self._http_error_msg(exc, err_msg)
+            http_err_msg = self._get_http_error_message(exc, err_msg)
             raise AuthenticationException(http_err_msg) from exc
 
         except requests.RequestException as exc:
@@ -331,13 +331,13 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            http_err_msg = self._http_error_msg(exc, err_msg)
+            http_err_msg = self._get_http_error_message(exc, err_msg)
             raise AuthenticationException(http_err_msg) from exc
 
         except requests.RequestException as exc:
             raise AuthenticationException(err_msg) from exc
 
-    def _http_error_msg(self, exc: requests.HTTPError, title: str) -> str:
+    def _get_http_error_message(self, exc: requests.HTTPError, title: str) -> str:
         """Get HTTP error message."""
         response = exc.response
         request = response.request
@@ -389,7 +389,7 @@ class APIKMSClient(KMSClient):
             return response
 
         except requests.HTTPError as exc:
-            http_err_msg = self._http_error_msg(exc, err_msg)
+            http_err_msg = self._get_http_error_message(exc, err_msg)
             raise KMSClientException(http_err_msg) from exc
 
         except requests.RequestException as exc:
