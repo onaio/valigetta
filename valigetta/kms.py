@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import boto3
 import requests
 from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
 
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
@@ -85,6 +86,14 @@ class AWSKMSClient(KMSClient):
             region_name=region_name,
         )
 
+    def _handle_boto_error(
+        self, exc: Exception, msg: str, default_exc_cls=KMSClientException
+    ) -> NoReturn:
+        """Handle Botocore errors."""
+        if isinstance(exc, BotoConnectionError):
+            raise ConnectionException(msg) from exc
+        raise default_exc_cls(msg) from exc
+
     def create_key(self, description: str | None = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
 
@@ -99,7 +108,7 @@ class AWSKMSClient(KMSClient):
                 Description=description if description else "",
             )
         except (BotoCoreError, ClientError) as exc:
-            raise CreateKeyException("Failed to create key") from exc
+            self._handle_boto_error(exc, "Failed to create key", CreateKeyException)
 
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
@@ -121,7 +130,9 @@ class AWSKMSClient(KMSClient):
                 EncryptionAlgorithm="RSAES_OAEP_SHA_256",
             )
         except (BotoCoreError, ClientError) as exc:
-            raise DecryptException("Failed to decrypt ciphertext") from exc
+            self._handle_boto_error(
+                exc, "Failed to decrypt ciphertext", DecryptException
+            )
 
         return response["Plaintext"]
 
@@ -134,7 +145,9 @@ class AWSKMSClient(KMSClient):
         try:
             response = self.boto3_client.get_public_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise GetPublicKeyException("Failed to get public key") from exc
+            self._handle_boto_error(
+                exc, "Failed to get public key", GetPublicKeyException
+            )
 
         return der_public_key_to_pem(response["PublicKey"])
 
@@ -147,7 +160,7 @@ class AWSKMSClient(KMSClient):
         try:
             response = self.boto3_client.describe_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise DescribeKeyException("Failed to describe key") from exc
+            self._handle_boto_error(exc, "Failed to describe key", DescribeKeyException)
 
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
@@ -167,9 +180,9 @@ class AWSKMSClient(KMSClient):
                 KeyId=key_id, Description=description
             )
         except (BotoCoreError, ClientError) as exc:
-            raise UpdateKeyDescriptionException(
-                "Failed to update key description"
-            ) from exc
+            self._handle_boto_error(
+                exc, "Failed to update key description", UpdateKeyDescriptionException
+            )
 
     def disable_key(self, key_id: str) -> None:
         """Sets the state of a KMS key to disabled
@@ -181,7 +194,7 @@ class AWSKMSClient(KMSClient):
         try:
             self.boto3_client.disable_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise DisableKeyException("Failed to disable key") from exc
+            self._handle_boto_error(exc, "Failed to disable key", DisableKeyException)
 
     def create_alias(self, alias_name: str, key_id: str) -> None:
         """Creates an alias for a KMS key.
@@ -194,7 +207,7 @@ class AWSKMSClient(KMSClient):
         except self.boto3_client.exceptions.AlreadyExistsException as exc:
             raise AliasAlreadyExistsException("Alias already exists") from exc
         except (BotoCoreError, ClientError) as exc:
-            raise CreateAliasException("Failed to create alias") from exc
+            self._handle_boto_error(exc, "Failed to create alias", CreateAliasException)
 
     def delete_alias(self, alias_name: str) -> None:
         """Deletes an alias for a KMS key.
@@ -204,7 +217,7 @@ class AWSKMSClient(KMSClient):
         try:
             self.boto3_client.delete_alias(AliasName=alias_name)
         except (BotoCoreError, ClientError) as exc:
-            raise DeleteAliasException("Failed to delete alias") from exc
+            self._handle_boto_error(exc, "Failed to delete alias", DeleteAliasException)
 
 
 class APIKMSClient(KMSClient):

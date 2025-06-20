@@ -5,6 +5,7 @@ from unittest.mock import Mock, call, patch
 import pytest
 import requests
 from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
 
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
@@ -52,6 +53,16 @@ def test_aws_create_key(aws_kms_client):
 
     assert "Failed to create key" in str(exc_info.value)
 
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.create_key = Mock()
+        aws_kms_client.boto3_client.create_key.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
+        aws_kms_client.create_key(description="Test KMS key")
+
+    assert "Failed to create key" in str(exc_info.value)
+
 
 def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
     """AWSKMSClient decrypt decrypts encrypted data."""
@@ -86,6 +97,16 @@ def test_aws_decrypt(aws_kms_key, aws_kms_client, boto3_kms_client):
 
     assert "Failed to decrypt" in str(exc_info.value)
 
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.decrypt = Mock()
+        aws_kms_client.boto3_client.decrypt.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
+        aws_kms_client.decrypt(key_id=key_id, ciphertext=encrypted_aes_key)
+
+    assert "Failed to decrypt" in str(exc_info.value)
+
 
 def test_aws_get_public_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient get_public_key returns PEM-formatted public key."""
@@ -115,6 +136,16 @@ def test_aws_get_public_key(aws_kms_client, aws_kms_key):
 
     assert "Failed to get public key" in str(exc_info.value)
 
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.get_public_key = Mock()
+        aws_kms_client.boto3_client.get_public_key.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
+        aws_kms_client.get_public_key(key_id=aws_kms_key)
+
+    assert "Failed to get public key" in str(exc_info.value)
+
 
 def test_aws_describe_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient describe_key returns key metadata."""
@@ -139,6 +170,16 @@ def test_aws_describe_key(aws_kms_client, aws_kms_key):
     with pytest.raises(DescribeKeyException) as exc_info:
         aws_kms_client.boto3_client.describe_key = Mock()
         aws_kms_client.boto3_client.describe_key.side_effect = BotoCoreError()
+        aws_kms_client.describe_key(key_id=aws_kms_key)
+
+    assert "Failed to describe key" in str(exc_info.value)
+
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.describe_key = Mock()
+        aws_kms_client.boto3_client.describe_key.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
         aws_kms_client.describe_key(key_id=aws_kms_key)
 
     assert "Failed to describe key" in str(exc_info.value)
@@ -174,6 +215,17 @@ def test_aws_update_key_description(aws_kms_client, aws_kms_key):
 
     assert "Failed to update key description" in str(exc_info.value)
 
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.update_key_description.side_effect = (
+            BotoConnectionError(error={"error": "Simulated connection failure"})
+        )
+        aws_kms_client.update_key_description(
+            key_id=key_id, description="New description"
+        )
+
+    assert "Failed to update key description" in str(exc_info.value)
+
 
 def test_aws_disable_key(aws_kms_client, aws_kms_key):
     """AWSKMSClient disable_key disables KMS key."""
@@ -195,6 +247,15 @@ def test_aws_disable_key(aws_kms_client, aws_kms_key):
     # BotoCoreError is handled
     with pytest.raises(DisableKeyException) as exc_info:
         aws_kms_client.boto3_client.disable_key.side_effect = BotoCoreError()
+        aws_kms_client.disable_key(key_id)
+
+    assert "Failed to disable key" in str(exc_info.value)
+
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.disable_key.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
         aws_kms_client.disable_key(key_id)
 
     assert "Failed to disable key" in str(exc_info.value)
@@ -243,6 +304,15 @@ def test_aws_create_alias(aws_kms_client, aws_kms_key):
 
     assert "Alias already exists" in str(exc_info.value)
 
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.create_alias.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
+        aws_kms_client.create_alias(alias_name=alias_name, key_id=aws_kms_key)
+
+    assert "Failed to create alias" in str(exc_info.value)
+
 
 def test_aws_delete_alias(aws_kms_client, aws_kms_key):
     """AWSKMSClient delete_alias deletes an alias for a KMS key."""
@@ -266,6 +336,15 @@ def test_aws_delete_alias(aws_kms_client, aws_kms_key):
     # BotoCoreError is handled
     with pytest.raises(DeleteAliasException) as exc_info:
         aws_kms_client.boto3_client.delete_alias.side_effect = BotoCoreError()
+        aws_kms_client.delete_alias(alias_name=alias_name)
+
+    assert "Failed to delete alias" in str(exc_info.value)
+
+    # ConnectionError is handled
+    with pytest.raises(ConnectionException) as exc_info:
+        aws_kms_client.boto3_client.delete_alias.side_effect = BotoConnectionError(
+            error={"error": "Simulated connection failure"}
+        )
         aws_kms_client.delete_alias(alias_name=alias_name)
 
     assert "Failed to delete alias" in str(exc_info.value)
