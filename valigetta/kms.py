@@ -1,7 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, NoReturn
 from urllib.parse import urlparse
 
 import boto3
@@ -11,6 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
     AuthenticationException,
+    ConnectionException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -305,8 +306,7 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise AuthenticationException(http_err_msg) from exc
+            self._handle_http_error(exc, err_msg, AuthenticationException)
 
         except requests.RequestException as exc:
             raise AuthenticationException(err_msg) from exc
@@ -331,11 +331,24 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise AuthenticationException(http_err_msg) from exc
+            self._handle_http_error(exc, err_msg, AuthenticationException)
 
         except requests.RequestException as exc:
             raise AuthenticationException(err_msg) from exc
+
+    def _handle_http_error(
+        self, exc: requests.HTTPError, title: str, default_exc_cls=KMSClientException
+    ) -> NoReturn:
+        """Handle HTTPError."""
+        response = exc.response
+        status_code = response.status_code
+
+        msg = self._get_http_error_message(exc, title)
+
+        if status_code in {502, 503, 504}:
+            raise ConnectionException(msg) from exc
+
+        raise default_exc_cls(msg) from exc
 
     def _get_http_error_message(self, exc: requests.HTTPError, title: str) -> str:
         """Get HTTP error message."""
@@ -388,8 +401,7 @@ class APIKMSClient(KMSClient):
             return response
 
         except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise KMSClientException(http_err_msg) from exc
+            self._handle_http_error(exc, err_msg)
 
         except requests.RequestException as exc:
             raise KMSClientException(err_msg) from exc

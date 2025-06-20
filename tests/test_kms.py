@@ -9,6 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
     AuthenticationException,
+    ConnectionException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -725,22 +726,81 @@ def test_api_cb_on_refresh_token(api_kms_client_urls):
 def test_api_get_token_http_error(api_kms_client):
     """APIKMSClient raises an error if the token request fails with an HTTP error."""
     with patch("requests.post") as mock_post:
-        mock_post.return_value.status_code = 500
-        mock_post.return_value.raise_for_status.side_effect = requests.HTTPError(
-            response=Mock(
-                status_code=500,
-                text="test-error",
-                request=Mock(
-                    method="POST",
-                    url="http://localhost:8000/token",
-                ),
-            )
-        )
+        mock_post.return_value.raise_for_status.side_effect = [
+            requests.HTTPError(
+                response=Mock(
+                    status_code=400,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/token",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=502,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/token",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=503,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/token",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=504,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/token",
+                    ),
+                )
+            ),
+        ]
+
         with pytest.raises(AuthenticationException) as exc_info:
             api_kms_client.get_token()
 
         assert "Failed to get token" in str(exc_info.value)
-        assert "Status code: 500" in str(exc_info.value)
+        assert "Status code: 400" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/token" in str(exc_info.value)
+        assert "Response: test-error" in str(exc_info.value)
+
+        # 502 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client.get_token()
+
+        assert "Failed to get token" in str(exc_info.value)
+        assert "Status code: 502" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/token" in str(exc_info.value)
+        assert "Response: test-error" in str(exc_info.value)
+
+        # 503 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client.get_token()
+
+        assert "Failed to get token" in str(exc_info.value)
+        assert "Status code: 503" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/token" in str(exc_info.value)
+        assert "Response: test-error" in str(exc_info.value)
+
+        # 504 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client.get_token()
+
+        assert "Failed to get token" in str(exc_info.value)
+        assert "Status code: 504" in str(exc_info.value)
         assert "Request: POST http://localhost:8000/token" in str(exc_info.value)
         assert "Response: test-error" in str(exc_info.value)
 
@@ -793,24 +853,79 @@ def test_api_refresh_access_token_request_exception(api_kms_client):
 def test_api_request_http_error(api_kms_client):
     """APIKMSClient raises an error if a request fails with an HTTP error."""
     with patch("requests.request") as mock_request:
-        mock_request.return_value.status_code = 500
-        mock_request.return_value.raise_for_status.side_effect = requests.HTTPError(
-            response=Mock(
-                status_code=500,
-                text="test-error",
-                request=Mock(
-                    method="POST",
-                    url="http://localhost:8000/keys",
-                ),
-            )
-        )
+        mock_request.return_value.raise_for_status.side_effect = [
+            requests.HTTPError(
+                response=Mock(
+                    status_code=400,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/keys",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=502,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/keys",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=503,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/keys",
+                    ),
+                )
+            ),
+            requests.HTTPError(
+                response=Mock(
+                    status_code=504,
+                    text="test-error",
+                    request=Mock(
+                        method="POST",
+                        url="http://localhost:8000/keys",
+                    ),
+                )
+            ),
+        ]
         with pytest.raises(KMSClientException) as exc_info:
             api_kms_client._request("POST", "http://localhost:8000/keys")
 
         assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
-        assert "Status code: 500" in str(exc_info.value)
+        assert "Status code: 400" in str(exc_info.value)
         assert "Request: POST http://localhost:8000/keys" in str(exc_info.value)
         assert "Response: test-error" in str(exc_info.value)
+
+        # 502 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client._request("POST", "http://localhost:8000/keys")
+
+        assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
+        assert "Status code: 502" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/keys" in str(exc_info.value)
+
+        # 503 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client._request("POST", "http://localhost:8000/keys")
+
+        assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
+        assert "Status code: 503" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/keys" in str(exc_info.value)
+
+        # 504 is handled as ConnectionException
+        with pytest.raises(ConnectionException) as exc_info:
+            api_kms_client._request("POST", "http://localhost:8000/keys")
+
+        assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
+        assert "Status code: 504" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/keys" in str(exc_info.value)
 
 
 def test_api_request_request_exception(api_kms_client):
