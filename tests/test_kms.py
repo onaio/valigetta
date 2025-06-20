@@ -782,7 +782,7 @@ def test_api_create_alias(api_kms_client):
 
 
 def test_api_token_optional(api_kms_client_urls):
-    """Token is not set on initialization if not provided."""
+    """Authentication is triggered if token is not provided."""
     with patch("requests.post") as mock_post:
         mock_post.return_value.json.return_value = {
             "access": "test-token",
