@@ -1,7 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Callable
 from urllib.parse import urlparse
 
 import boto3
@@ -288,6 +288,8 @@ class APIKMSClient(KMSClient):
 
     def get_token(self) -> dict:
         """Get authentication token."""
+        err_msg = "Failed to get token"
+
         try:
             response = requests.post(
                 self.urls[self.__class__.URL_TOKEN_KEY],
@@ -303,17 +305,16 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            status_code, text, payload = self._http_error_context(exc)
-
-            raise AuthenticationException(
-                f"Failed to get token: {status_code} - {text}\n" f"Payload: {payload}"
-            ) from exc
+            http_err_msg = self._http_error_msg(exc, err_msg)
+            raise AuthenticationException(http_err_msg) from exc
 
         except requests.RequestException as exc:
-            raise AuthenticationException("Failed to get token") from exc
+            raise AuthenticationException(err_msg) from exc
 
     def refresh_access_token(self) -> dict:
         """Refresh authentication token."""
+        err_msg = "Failed to refresh token"
+
         try:
             response = requests.post(
                 self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
@@ -330,18 +331,14 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            status_code, text, payload = self._http_error_context(exc)
-
-            raise AuthenticationException(
-                f"Failed to refresh token: {status_code} - {text}\n"
-                f"Payload: {payload}"
-            ) from exc
+            http_err_msg = self._http_error_msg(exc, err_msg)
+            raise AuthenticationException(http_err_msg) from exc
 
         except requests.RequestException as exc:
-            raise AuthenticationException("Failed to refresh token") from exc
+            raise AuthenticationException(err_msg) from exc
 
-    def _http_error_context(self, exc: requests.HTTPError) -> tuple[int, Any, Any]:
-        """Get HTTP error context."""
+    def _http_error_msg(self, exc: requests.HTTPError, title: str) -> str:
+        """Get HTTP error message."""
         response = exc.response
         request = response.request
         payload = request.body
@@ -349,13 +346,21 @@ class APIKMSClient(KMSClient):
         if isinstance(payload, bytes):
             payload = payload.decode("utf-8")
 
-        return (response.status_code, response.text, payload)
+        return (
+            f"{title}:\n"
+            f"Status code: {response.status_code}\n"
+            f"Request: {request.method} {request.url}\n"
+            f"Payload: {payload}\n"
+            f"Response: {response.text}"
+        )
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         """Make a request to the API."""
         headers = kwargs.pop("headers", {}).copy()
         headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
+
+        err_msg = f"Request to {url} failed"
 
         try:
             response = requests.request(method, url, **kwargs)
@@ -384,15 +389,11 @@ class APIKMSClient(KMSClient):
             return response
 
         except requests.HTTPError as exc:
-            status_code, text, payload = self._http_error_context(exc)
-
-            raise KMSClientException(
-                f"Request to {url} failed: {status_code} - {text}\n"
-                f"Payload: {payload}"
-            ) from exc
+            http_err_msg = self._http_error_msg(exc, err_msg)
+            raise KMSClientException(http_err_msg) from exc
 
         except requests.RequestException as exc:
-            raise KMSClientException(f"Request to {url} failed") from exc
+            raise KMSClientException(err_msg) from exc
 
     def create_key(self, description: str | None = None) -> dict:
         """Create a new key.

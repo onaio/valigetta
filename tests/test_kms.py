@@ -728,13 +728,22 @@ def test_api_get_token_http_error(api_kms_client):
         mock_post.return_value.status_code = 500
         mock_post.return_value.raise_for_status.side_effect = requests.HTTPError(
             response=Mock(
-                status_code=500, text="test-error", request=Mock(body=b"test-payload")
+                status_code=500,
+                text="test-error",
+                request=Mock(
+                    body=b"test-payload",
+                    method="POST",
+                    url="http://localhost:8000/token",
+                ),
             )
         )
         with pytest.raises(AuthenticationException) as exc_info:
             api_kms_client.get_token()
 
-        assert "Failed to get token: 500 - test-error" in str(exc_info.value)
+        assert "Failed to get token" in str(exc_info.value)
+        assert "Status code: 500" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/token" in str(exc_info.value)
+        assert "Response: test-error" in str(exc_info.value)
         assert "Payload: test-payload" in str(exc_info.value)
 
 
@@ -754,13 +763,24 @@ def test_api_refresh_access_token_http_error(api_kms_client):
         mock_post.return_value.status_code = 500
         mock_post.return_value.raise_for_status.side_effect = requests.HTTPError(
             response=Mock(
-                status_code=500, text="test-error", request=Mock(body=b"test-payload")
+                status_code=500,
+                text="test-error",
+                request=Mock(
+                    body=b"test-payload",
+                    method="POST",
+                    url="http://localhost:8000/token/refresh",
+                ),
             )
         )
         with pytest.raises(AuthenticationException) as exc_info:
             api_kms_client.refresh_access_token()
 
-        assert "Failed to refresh token: 500 - test-error" in str(exc_info.value)
+        assert "Failed to refresh token" in str(exc_info.value)
+        assert "Status code: 500" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/token/refresh" in str(
+            exc_info.value
+        )
+        assert "Response: test-error" in str(exc_info.value)
         assert "Payload: test-payload" in str(exc_info.value)
 
 
@@ -782,15 +802,20 @@ def test_api_request_http_error(api_kms_client):
             response=Mock(
                 status_code=500,
                 text="test-error",
-                request=Mock(body=b"test-payload"),
+                request=Mock(
+                    body=b"test-payload",
+                    method="POST",
+                    url="http://localhost:8000/keys",
+                ),
             )
         )
         with pytest.raises(KMSClientException) as exc_info:
             api_kms_client._request("POST", "http://localhost:8000/keys")
 
-        assert "Request to http://localhost:8000/keys failed: 500 - test-error" in str(
-            exc_info.value
-        )
+        assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
+        assert "Status code: 500" in str(exc_info.value)
+        assert "Request: POST http://localhost:8000/keys" in str(exc_info.value)
+        assert "Response: test-error" in str(exc_info.value)
         assert "Payload: test-payload" in str(exc_info.value)
 
 
