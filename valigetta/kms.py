@@ -283,6 +283,7 @@ class APIKMSClient(KMSClient):
         return self.token.get("refresh")
 
     def _is_url_valid(self, url: str) -> bool:
+        """Check if a URL is valid."""
         try:
             parsed = urlparse(url)
             return all([parsed.scheme, parsed.netloc])
@@ -290,6 +291,7 @@ class APIKMSClient(KMSClient):
             return False
 
     def _validate_urls(self, urls: dict[str, str]) -> None:
+        """Validate the URLs."""
         errors = {}
 
         for key in self.URL_KEYS:
@@ -299,6 +301,70 @@ class APIKMSClient(KMSClient):
                 errors[key] = f"Invalid value '{urls[key]}'"
         if errors:
             raise InvalidAPIURLException(errors)
+
+    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Make a request to the API."""
+        headers = kwargs.pop("headers", {}).copy()
+        headers["Authorization"] = f"Bearer {self.access_token}"
+        kwargs["headers"] = headers
+
+        response = requests.request(method, url, **kwargs)
+
+        if response.status_code == 401:
+            try:
+                self.refresh_access_token()  # Try to refresh the access token
+            except AuthenticationException:
+                # Refresh token expired, authenticate again
+                try:
+                    self.get_token()
+                except AuthenticationException as exc:
+                    # Authentication failed, raise an error
+                    raise AuthenticationException("Failed to re-authenticate") from exc
+
+            # Refresh token succeeded, retry the request
+            headers = kwargs.get("headers", {}).copy()
+            headers["Authorization"] = f"Bearer {self.access_token}"
+            kwargs["headers"] = headers
+
+            response = requests.request(method, url, **kwargs)
+
+        response.raise_for_status()
+
+        return response
+
+    def _handle_request_exception(
+        self,
+        exc: requests.RequestException,
+        msg: str,
+        default_exc_cls=KMSClientException,
+    ) -> NoReturn:
+        """Handle RequestException."""
+        if isinstance(exc, requests.HTTPError):
+            response = exc.response
+            status_code = response.status_code
+
+            msg = self._get_http_error_message(exc, msg)
+
+            if status_code in {502, 503, 504}:
+                raise ConnectionException(msg) from exc
+
+        raise default_exc_cls(msg) from exc
+
+    def _get_http_error_message(self, exc: requests.HTTPError, title: str) -> str:
+        """Get HTTP error message."""
+        response = exc.response
+        request = response.request
+        payload = request.body
+
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+
+        return (
+            f"{title}:\n"
+            f"Status code: {response.status_code}\n"
+            f"Request: {request.method} {request.url}\n"
+            f"Response: {response.text}"
+        )
 
     def get_token(self) -> dict:
         """Get authentication token."""
@@ -343,70 +409,6 @@ class APIKMSClient(KMSClient):
             self._handle_request_exception(
                 exc, "Failed to refresh token", AuthenticationException
             )
-
-    def _handle_request_exception(
-        self,
-        exc: requests.RequestException,
-        msg: str,
-        default_exc_cls=KMSClientException,
-    ) -> NoReturn:
-        """Handle RequestException."""
-        if isinstance(exc, requests.HTTPError):
-            response = exc.response
-            status_code = response.status_code
-
-            msg = self._get_http_error_message(exc, msg)
-
-            if status_code in {502, 503, 504}:
-                raise ConnectionException(msg) from exc
-
-        raise default_exc_cls(msg) from exc
-
-    def _get_http_error_message(self, exc: requests.HTTPError, title: str) -> str:
-        """Get HTTP error message."""
-        response = exc.response
-        request = response.request
-        payload = request.body
-
-        if isinstance(payload, bytes):
-            payload = payload.decode("utf-8")
-
-        return (
-            f"{title}:\n"
-            f"Status code: {response.status_code}\n"
-            f"Request: {request.method} {request.url}\n"
-            f"Response: {response.text}"
-        )
-
-    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """Make a request to the API."""
-        headers = kwargs.pop("headers", {}).copy()
-        headers["Authorization"] = f"Bearer {self.access_token}"
-        kwargs["headers"] = headers
-
-        response = requests.request(method, url, **kwargs)
-
-        if response.status_code == 401:
-            try:
-                self.refresh_access_token()  # Try to refresh the access token
-            except AuthenticationException:
-                # Refresh token expired, authenticate again
-                try:
-                    self.get_token()
-                except AuthenticationException as exc:
-                    # Authentication failed, raise an error
-                    raise AuthenticationException("Failed to re-authenticate") from exc
-
-            # Refresh token succeeded, retry the request
-            headers = kwargs.get("headers", {}).copy()
-            headers["Authorization"] = f"Bearer {self.access_token}"
-            kwargs["headers"] = headers
-
-            response = requests.request(method, url, **kwargs)
-
-        response.raise_for_status()
-
-        return response
 
     def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
