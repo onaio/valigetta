@@ -788,7 +788,9 @@ def test_api_request_http_error(api_kms_client):
         with pytest.raises(KMSClientException) as exc_info:
             api_kms_client._request("POST", "http://localhost:8000/keys")
 
-        assert "Request to http://localhost:8000/keys failed" in str(exc_info.value)
+        assert "Request to http://localhost:8000/keys failed: 500 - test-error" in str(
+            exc_info.value
+        )
         assert "Payload: test-payload" in str(exc_info.value)
 
 
