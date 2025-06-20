@@ -803,7 +803,7 @@ def test_api_token_optional(api_kms_client_urls):
         )
 
 
-def test_api_token_refreshed_if_expired(api_kms_client):
+def test_api_access_token_expired(api_kms_client):
     """Access token is refreshed if expired."""
     with patch("requests.post") as mock_post, patch("requests.request") as mock_request:
         # Mock the /token/refresh call to return a new access token
@@ -848,8 +848,8 @@ def test_api_token_refreshed_if_expired(api_kms_client):
     assert api_kms_client.access_token == "new-token"
 
 
-def test_api_authenticate_on_refresh_token_failure(api_kms_client):
-    """Re-authentication is triggered if refresh token fails."""
+def test_api_refresh_token_expired(api_kms_client):
+    """Re-authentication is triggered if refresh token is expired."""
     with patch("requests.post") as mock_post, patch("requests.request") as mock_request:
         # Mock the /token/refresh call to fail
         unauthorized_response = Mock(spec=requests.Response)
