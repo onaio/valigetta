@@ -302,8 +302,6 @@ class APIKMSClient(KMSClient):
 
     def get_token(self) -> dict:
         """Get authentication token."""
-        err_msg = "Failed to get token"
-
         try:
             response = requests.post(
                 self.urls[self.__class__.URL_TOKEN_KEY],
@@ -318,15 +316,13 @@ class APIKMSClient(KMSClient):
 
             return data
 
-        except requests.HTTPError as exc:
-            self._handle_http_error(exc, err_msg, AuthenticationException)
-
         except requests.RequestException as exc:
-            raise AuthenticationException(err_msg) from exc
+            self._handle_request_exception(
+                exc, "Failed to get token", AuthenticationException
+            )
 
     def refresh_access_token(self) -> dict:
         """Refresh authentication token."""
-        err_msg = "Failed to refresh token"
 
         try:
             response = requests.post(
@@ -343,23 +339,26 @@ class APIKMSClient(KMSClient):
 
             return data
 
-        except requests.HTTPError as exc:
-            self._handle_http_error(exc, err_msg, AuthenticationException)
-
         except requests.RequestException as exc:
-            raise AuthenticationException(err_msg) from exc
+            self._handle_request_exception(
+                exc, "Failed to refresh token", AuthenticationException
+            )
 
-    def _handle_http_error(
-        self, exc: requests.HTTPError, title: str, default_exc_cls=KMSClientException
+    def _handle_request_exception(
+        self,
+        exc: requests.RequestException,
+        msg: str,
+        default_exc_cls=KMSClientException,
     ) -> NoReturn:
-        """Handle HTTPError."""
-        response = exc.response
-        status_code = response.status_code
+        """Handle RequestException."""
+        if isinstance(exc, requests.HTTPError):
+            response = exc.response
+            status_code = response.status_code
 
-        msg = self._get_http_error_message(exc, title)
+            msg = self._get_http_error_message(exc, msg)
 
-        if status_code in {502, 503, 504}:
-            raise ConnectionException(msg) from exc
+            if status_code in {502, 503, 504}:
+                raise ConnectionException(msg) from exc
 
         raise default_exc_cls(msg) from exc
 
@@ -385,39 +384,29 @@ class APIKMSClient(KMSClient):
         headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
 
-        err_msg = f"Request to {url} failed"
+        response = requests.request(method, url, **kwargs)
 
-        try:
+        if response.status_code == 401:
+            try:
+                self.refresh_access_token()  # Try to refresh the access token
+            except AuthenticationException:
+                # Refresh token expired, authenticate again
+                try:
+                    self.get_token()
+                except AuthenticationException as exc:
+                    # Authentication failed, raise an error
+                    raise AuthenticationException("Failed to re-authenticate") from exc
+
+            # Refresh token succeeded, retry the request
+            headers = kwargs.get("headers", {}).copy()
+            headers["Authorization"] = f"Bearer {self.access_token}"
+            kwargs["headers"] = headers
+
             response = requests.request(method, url, **kwargs)
 
-            if response.status_code == 401:
-                try:
-                    self.refresh_access_token()  # Try to refresh the access token
-                except AuthenticationException:
-                    # Refresh token expired, authenticate again
-                    try:
-                        self.get_token()
-                    except AuthenticationException as exc:
-                        # Authentication failed, raise an error
-                        raise AuthenticationException(
-                            "Failed to re-authenticate"
-                        ) from exc
+        response.raise_for_status()
 
-                # Refresh token succeeded, retry the request
-                headers = kwargs.get("headers", {}).copy()
-                headers["Authorization"] = f"Bearer {self.access_token}"
-                kwargs["headers"] = headers
-
-                response = requests.request(method, url, **kwargs)
-
-            response.raise_for_status()
-            return response
-
-        except requests.HTTPError as exc:
-            self._handle_http_error(exc, err_msg)
-
-        except requests.RequestException as exc:
-            raise KMSClientException(err_msg) from exc
+        return response
 
     def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
@@ -432,8 +421,11 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_CREATE_KEY],
                 json={"description": description},
             )
-        except KMSClientException as exc:
-            raise CreateKeyException("Failed to create key") from exc
+
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to create key", CreateKeyException
+            )
 
         return response.json()
 
@@ -452,8 +444,10 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
                 json={"ciphertext": ciphertext_base64},
             )
-        except KMSClientException as exc:
-            raise DecryptException("Failed to decrypt ciphertext") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to decrypt ciphertext", DecryptException
+            )
 
         plaintext_base64 = response.json()["plaintext"]
 
@@ -470,8 +464,10 @@ class APIKMSClient(KMSClient):
                 "GET",
                 self.urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise GetPublicKeyException("Failed to get public key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to get public key", GetPublicKeyException
+            )
 
         return response.json()["public_key"]
 
@@ -486,8 +482,10 @@ class APIKMSClient(KMSClient):
                 "GET",
                 self.urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise DescribeKeyException("Failed to describe key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to describe key", DescribeKeyException
+            )
 
         return response.json()
 
@@ -505,10 +503,10 @@ class APIKMSClient(KMSClient):
                 ),
                 json={"description": description},
             )
-        except KMSClientException as exc:
-            raise UpdateKeyDescriptionException(
-                "Failed to update key description"
-            ) from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to update key description", UpdateKeyDescriptionException
+            )
 
         return response.json()
 
@@ -522,8 +520,10 @@ class APIKMSClient(KMSClient):
                 "POST",
                 self.urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise DisableKeyException("Failed to disable key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to disable key", DisableKeyException
+            )
 
         return response.json()
 
@@ -539,7 +539,9 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
                 json={"alias": alias_name},
             )
-        except KMSClientException as exc:
-            raise CreateAliasException("Failed to create alias") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to create alias", CreateAliasException
+            )
 
         return response.json()
