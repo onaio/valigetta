@@ -1,7 +1,7 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import boto3
@@ -303,9 +303,10 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            response = exc.response
+            status_code, text, payload = self._http_error_context(exc)
+
             raise AuthenticationException(
-                f"Failed to get token: {response.status_code} - {response.text}"
+                f"Failed to get token: {status_code} - {text}\n" f"Payload: {payload}"
             ) from exc
 
         except requests.RequestException as exc:
@@ -329,15 +330,29 @@ class APIKMSClient(KMSClient):
             return data
 
         except requests.HTTPError as exc:
-            response = exc.response
+            status_code, text, payload = self._http_error_context(exc)
+
             raise AuthenticationException(
-                f"Failed to refresh token: {response.status_code} - {response.text}"
+                f"Failed to refresh token: {status_code} - {text}\n"
+                f"Payload: {payload}"
             ) from exc
 
         except requests.RequestException as exc:
             raise AuthenticationException("Failed to refresh token") from exc
 
+    def _http_error_context(self, exc: requests.HTTPError) -> tuple[int, Any, Any]:
+        """Get HTTP error context."""
+        response = exc.response
+        request = response.request
+        payload = request.body
+
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8")
+
+        return (response.status_code, response.text, payload)
+
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Make a request to the API."""
         headers = kwargs.pop("headers", {}).copy()
         headers["Authorization"] = f"Bearer {self.access_token}"
         kwargs["headers"] = headers
@@ -369,9 +384,11 @@ class APIKMSClient(KMSClient):
             return response
 
         except requests.HTTPError as exc:
-            response = exc.response
+            status_code, text, payload = self._http_error_context(exc)
+
             raise KMSClientException(
-                f"Request to {url} failed: {response.status_code} - {response.text}"
+                f"Request to {url} failed: {status_code} - {text}\n"
+                f"Payload: {payload}"
             ) from exc
 
         except requests.RequestException as exc:
