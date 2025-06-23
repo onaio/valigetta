@@ -40,3 +40,5 @@ client.delete_alias(alias_name="alias/my-key-alias")
 - **`AWSKMSClient` users**:
   [AWS KMS DeleteAlias API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_DeleteAlias.html)
   **Required IAM Permission**: `kms:DeleteAlias`
+- **`APIKMSClient` users**:
+  This method is not supported by the `APIKMSClient`.

@@ -51,3 +51,15 @@ client.create_alias(
 - **`AWSKMSClient` users**:
   [AWS KMS CreateAlias API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateAlias.html)
   **Required IAM Permission**: `kms:CreateAlias`
+- **`APIKMSClient` users**:
+  This client sends a `PATCH` request to the `create_alias` URL.
+  Example:
+
+  ```
+  PATCH https://kms.example.com/keys/8eb847a3-9eb0-4bd9-9758-f7d14a575985
+  Content-Type: application/json
+
+  {
+      "alias": "alias/my-key-alias"
+  }
+  ```

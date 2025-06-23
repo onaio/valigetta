@@ -76,3 +76,15 @@ print(response)
 - **`AWSKMSClient` users**:
   [AWS KMS CreateKey API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html)
   **Required IAM Permission**: `kms:CreateKey`
+- **`APIKMSClient` users**:
+  Makes a `POST` request to the `create_key` URL.
+  Example:
+
+  ```
+  POST https://kms.example.com/keys/
+  Content-Type: application/json
+
+  {
+    "description": "My first key"
+  }
+  ```

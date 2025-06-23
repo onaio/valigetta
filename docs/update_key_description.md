@@ -54,3 +54,15 @@ client.update_key_description(
 - **`AWSKMSClient` users**:
   [AWS KMS UpdateKeyDescription API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_UpdateKeyDescription.html)
   **Required IAM Permission**: `kms:UpdateKeyDescription`
+- **`APIKMSClient` users**:
+  This client sends a `PATCH` request to the `update_key_description` URL.
+  Example:
+
+  ```
+  PATCH https://kms.example.com/keys/8eb847a3-9eb0-4bd9-9758-f7d14a575985/
+  Content-Type: application/json
+
+  {
+      "description": "Updated key description"
+  }
+  ```
