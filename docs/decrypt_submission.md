@@ -39,7 +39,7 @@ This file provides the metadata required for decryption (e.g., instance ID, encr
 
 A dictionary mapping encrypted file names to `io.BytesIO` objects of the submission’s encrypted files.
 
-All encrypted file names listed in the `<encryptedXmlFile>` and `<media><file>` tags of the [submission XML](https://getodk.github.io/xforms-spec/encryption.html#submission-manifest) **must** be included as keys in this dictionary. These files are:
+All encrypted file names listed in the `<encryptedXmlFile>` and `<media><file>` tags of the [submission manifest](https://getodk.github.io/xforms-spec/encryption.html#submission-manifest) **must** be included as keys in this dictionary. These files are:
 
 - The encrypted submission file (e.g., `submission.xml.enc`)
 - Any encrypted media files (e.g., `myimage.jpg.enc`, `myaudio.mp3.enc`)
