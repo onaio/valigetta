@@ -69,3 +69,9 @@ print(response)
     "enabled": true
 }
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS DescribeKey API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_DescribeKey.html)
+  **Required IAM Permission**: `kms:DescribeKey`

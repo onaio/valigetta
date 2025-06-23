@@ -41,3 +41,9 @@ print(response)
 ```text
 "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS GetPublicKey API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_GetPublicKey.html)
+  **Required IAM Permission**: `kms:GetPublicKey`

@@ -70,3 +70,9 @@ print(response)
   "creation_date": "2023-04-01T12:00:00Z"
 }
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS CreateKey API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html)
+  **Required IAM Permission**: `kms:CreateKey`

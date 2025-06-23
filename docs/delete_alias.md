@@ -34,3 +34,9 @@ The following example deletes an alias for a KMS key.
 ```python
 client.delete_alias(alias_name="alias/my-key-alias")
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS DeleteAlias API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_DeleteAlias.html)
+  **Required IAM Permission**: `kms:DeleteAlias`

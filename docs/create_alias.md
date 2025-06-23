@@ -45,3 +45,9 @@ client.create_alias(
     key_id="8eb847a3-9eb0-4bd9-9758-f7d14a575985"
 )
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS CreateAlias API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateAlias.html)
+  **Required IAM Permission**: `kms:CreateAlias`

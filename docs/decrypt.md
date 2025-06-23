@@ -67,3 +67,9 @@ print(response)
   "plaintext": "b'decrypted data'"
 }
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS Decrypt API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_Decrypt.html)
+  **Required IAM Permission**: `kms:Decrypt`

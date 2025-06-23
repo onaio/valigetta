@@ -48,3 +48,9 @@ client.update_key_description(
     description="Updated key description"
 )
 ```
+
+## See Also
+
+- **`AWSKMSClient` users**:
+  [AWS KMS UpdateKeyDescription API Reference](https://docs.aws.amazon.com/kms/latest/APIReference/API_UpdateKeyDescription.html)
+  **Required IAM Permission**: `kms:UpdateKeyDescription`
