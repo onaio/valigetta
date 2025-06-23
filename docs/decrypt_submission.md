@@ -4,7 +4,7 @@
 
 Decrypts an encrypted ODK submission, including the submission XML and any associated media files.
 
-All encrypted files referenced in the submission manifest must be provided. If any required file is missing, an `valigetta.exceptions.InvalidSubmissionException.InvalidSubmissionException` will be raised.
+All encrypted files referenced in the submission manifest must be provided. If any required file is missing, an `valigetta.exceptions.InvalidSubmissionException` will be raised.
 
 ## Request
 
