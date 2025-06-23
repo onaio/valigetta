@@ -97,6 +97,8 @@ with open("submission.xml", "rb") as submission_xml, \
             out_file.write(decrypted_file.read())
 ```
 
+[See full decrypt_submission documentation](docs/decrypt_submission.md)
+
 ## Development
 
 ### Prerequisites
