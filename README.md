@@ -61,6 +61,42 @@ All clients support the same interface:
 - [KMSClient.create_alias](docs/create_alias.md)
 - [KMSClient.delete_alias](docs/delete_alias.md)
 
+### Decrypting a Submission
+
+Use `decrypt_submission()` to decrypt an encrypted ODK submission using a compatible `KMSClient` implementation (e.g. `AWSKMSClient`, `APIKMSClient`).
+
+```python
+from valigetta import AWSKMSClient
+from valigetta.submission import decrypt_submission
+from io import BytesIO
+
+# Initialize the KMS client
+kms = AWSKMSClient(
+    aws_access_key_id="your-access-key",
+    aws_secret_access_key="your-secret-key",
+    region_name="us-east-1"
+)
+
+# Decrypt the submission
+with open("submission.xml", "rb") as submission_xml, \
+     open("submission.xml.enc", "rb") as enc_submission_xml, \
+     open("sunset.png.enc", "rb") as enc_media1, \
+     open("forest.mp4.enc", "rb") as enc_media2:
+
+    for original_name, decrypted_file in decrypt_submission(
+        kms_client=kms,
+        key_id="your-key-id",
+        submission_xml=BytesIO(submission_xml.read()),
+        enc_files={
+            "submission.xml.enc": BytesIO(enc_submission_xml.read()),
+            "sunset.png.enc": BytesIO(enc_media1.read()),
+            "forest.mp4.enc": BytesIO(enc_media2.read()),
+        }
+    ):
+        with open(original_name, "wb") as out_file:
+            out_file.write(decrypted_file.read())
+```
+
 ## Development
 
 ### Prerequisites
