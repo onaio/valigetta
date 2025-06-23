@@ -58,13 +58,12 @@ The following example creates a new key with the description "My test key".
 
 ```python
 response = client.create_key(description="My test key")
-
 print(response)
 ```
 
 **Example Output**
 
-```json
+```python
 {
   "key_id": "8eb847a3-9eb0-4bd9-9758-f7d14a575985",
   "description": "My test key",

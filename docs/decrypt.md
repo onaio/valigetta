@@ -61,7 +61,7 @@ print(response)
 
 **Example Output**
 
-```json
+```python
 {
   "key_id": "8eb847a3-9eb0-4bd9-9758-f7d14a575985",
   "plaintext": "b'decrypted data'"
