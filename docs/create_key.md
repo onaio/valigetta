@@ -49,8 +49,8 @@ The date and time when the KMS key was created.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.CreateKeyException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.CreateKeyException`: Raised when KMS key creation fails.
 
 ## Examples
 

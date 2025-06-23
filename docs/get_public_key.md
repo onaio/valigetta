@@ -24,8 +24,8 @@ The public key of the KMS key.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.GetPublicKeyException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.GetPublicKeyException`: Raised when getting the public key from KMS fails.
 
 ## Examples
 

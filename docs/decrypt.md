@@ -31,8 +31,8 @@ The decrypted plaintext data.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.DecryptException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.DecryptException`: Raised when decryption with KMS fails.
 
 ## Examples
 

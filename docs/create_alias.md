@@ -31,9 +31,9 @@ This method does not return any value.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.CreateAliasException`
-- `valigetta.exceptions.AliasAlreadyExistsException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.CreateAliasException`: Raised when creating an alias for a KMS key fails.
+- `valigetta.exceptions.AliasAlreadyExistsException`: Raised when an alias already exists.
 
 ## Examples
 

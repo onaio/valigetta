@@ -47,8 +47,8 @@ Whether the KMS key is enabled.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.DescribeKeyException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.DescribeKeyException`: Raised when describing a KMS key fails.
 
 ## Examples
 

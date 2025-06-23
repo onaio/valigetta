@@ -24,8 +24,8 @@ This method does not return any value.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.DeleteAliasException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.DeleteAliasException`: Raised when deleting an alias for a KMS key fails.
 
 ## Examples
 

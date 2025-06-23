@@ -24,8 +24,8 @@ This method does not return any value.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.DisableKeyException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.DisableKeyException`: Raised when disabling a KMS key fails.
 
 ## Examples
 

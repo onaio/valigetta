@@ -35,8 +35,8 @@ This method does not return any value.
 
 ## Exceptions
 
-- `valigetta.exceptions.ConnectionException`
-- `valigetta.exceptions.UpdateKeyDescriptionException`
+- `valigetta.exceptions.ConnectionException`: Raised when a connection to the KMS server fails.
+- `valigetta.exceptions.UpdateKeyDescriptionException`: Raised when updating the description of a KMS key fails.
 
 ## Examples
 
