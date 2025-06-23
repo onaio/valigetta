@@ -74,3 +74,9 @@ class InvalidAPIURLException(KMSClientException):
     """Raised when invalid API URLs are provided."""
 
     pass
+
+
+class ConnectionException(KMSClientException):
+    """Raised when a connection to the KMS server fails."""
+
+    pass

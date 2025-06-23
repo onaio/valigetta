@@ -1,16 +1,18 @@
 import base64
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, NoReturn
 from urllib.parse import urlparse
 
 import boto3
 import requests
 from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
 
 from valigetta.exceptions import (
     AliasAlreadyExistsException,
     AuthenticationException,
+    ConnectionException,
     CreateAliasException,
     CreateKeyException,
     DecryptException,
@@ -84,6 +86,14 @@ class AWSKMSClient(KMSClient):
             region_name=region_name,
         )
 
+    def _handle_boto_error(
+        self, exc: Exception, msg: str, default_exc_cls=KMSClientException
+    ) -> NoReturn:
+        """Handle Botocore errors."""
+        if isinstance(exc, BotoConnectionError):
+            raise ConnectionException(msg) from exc
+        raise default_exc_cls(msg) from exc
+
     def create_key(self, description: str | None = None) -> dict:
         """Create RSA 2048-bit key pair for encryption/decryption.
 
@@ -98,7 +108,7 @@ class AWSKMSClient(KMSClient):
                 Description=description if description else "",
             )
         except (BotoCoreError, ClientError) as exc:
-            raise CreateKeyException("Failed to create key") from exc
+            self._handle_boto_error(exc, "Failed to create key", CreateKeyException)
 
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
@@ -120,7 +130,9 @@ class AWSKMSClient(KMSClient):
                 EncryptionAlgorithm="RSAES_OAEP_SHA_256",
             )
         except (BotoCoreError, ClientError) as exc:
-            raise DecryptException("Failed to decrypt ciphertext") from exc
+            self._handle_boto_error(
+                exc, "Failed to decrypt ciphertext", DecryptException
+            )
 
         return response["Plaintext"]
 
@@ -133,7 +145,9 @@ class AWSKMSClient(KMSClient):
         try:
             response = self.boto3_client.get_public_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise GetPublicKeyException("Failed to get public key") from exc
+            self._handle_boto_error(
+                exc, "Failed to get public key", GetPublicKeyException
+            )
 
         return der_public_key_to_pem(response["PublicKey"])
 
@@ -146,7 +160,7 @@ class AWSKMSClient(KMSClient):
         try:
             response = self.boto3_client.describe_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise DescribeKeyException("Failed to describe key") from exc
+            self._handle_boto_error(exc, "Failed to describe key", DescribeKeyException)
 
         return {
             "key_id": response["KeyMetadata"]["KeyId"],
@@ -166,9 +180,9 @@ class AWSKMSClient(KMSClient):
                 KeyId=key_id, Description=description
             )
         except (BotoCoreError, ClientError) as exc:
-            raise UpdateKeyDescriptionException(
-                "Failed to update key description"
-            ) from exc
+            self._handle_boto_error(
+                exc, "Failed to update key description", UpdateKeyDescriptionException
+            )
 
     def disable_key(self, key_id: str) -> None:
         """Sets the state of a KMS key to disabled
@@ -180,7 +194,7 @@ class AWSKMSClient(KMSClient):
         try:
             self.boto3_client.disable_key(KeyId=key_id)
         except (BotoCoreError, ClientError) as exc:
-            raise DisableKeyException("Failed to disable key") from exc
+            self._handle_boto_error(exc, "Failed to disable key", DisableKeyException)
 
     def create_alias(self, alias_name: str, key_id: str) -> None:
         """Creates an alias for a KMS key.
@@ -193,7 +207,7 @@ class AWSKMSClient(KMSClient):
         except self.boto3_client.exceptions.AlreadyExistsException as exc:
             raise AliasAlreadyExistsException("Alias already exists") from exc
         except (BotoCoreError, ClientError) as exc:
-            raise CreateAliasException("Failed to create alias") from exc
+            self._handle_boto_error(exc, "Failed to create alias", CreateAliasException)
 
     def delete_alias(self, alias_name: str) -> None:
         """Deletes an alias for a KMS key.
@@ -203,7 +217,7 @@ class AWSKMSClient(KMSClient):
         try:
             self.boto3_client.delete_alias(AliasName=alias_name)
         except (BotoCoreError, ClientError) as exc:
-            raise DeleteAliasException("Failed to delete alias") from exc
+            self._handle_boto_error(exc, "Failed to delete alias", DeleteAliasException)
 
 
 class APIKMSClient(KMSClient):
@@ -269,6 +283,7 @@ class APIKMSClient(KMSClient):
         return self.token.get("refresh")
 
     def _is_url_valid(self, url: str) -> bool:
+        """Check if a URL is valid."""
         try:
             parsed = urlparse(url)
             return all([parsed.scheme, parsed.netloc])
@@ -276,6 +291,7 @@ class APIKMSClient(KMSClient):
             return False
 
     def _validate_urls(self, urls: dict[str, str]) -> None:
+        """Validate the URLs."""
         errors = {}
 
         for key in self.URL_KEYS:
@@ -286,56 +302,53 @@ class APIKMSClient(KMSClient):
         if errors:
             raise InvalidAPIURLException(errors)
 
-    def get_token(self) -> dict:
-        """Get authentication token."""
-        err_msg = "Failed to get token"
+    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Make a request to the API."""
+        headers = kwargs.pop("headers", {}).copy()
+        headers["Authorization"] = f"Bearer {self.access_token}"
+        kwargs["headers"] = headers
 
-        try:
-            response = requests.post(
-                self.urls[self.__class__.URL_TOKEN_KEY],
-                data={"client_id": self.client_id, "client_secret": self.client_secret},
-            )
-            response.raise_for_status()
-            data = response.json()
-            self.token = data
+        response = requests.request(method, url, **kwargs)
 
-            if self._on_token_refresh:
-                self._on_token_refresh(data)
+        if response.status_code == 401:
+            try:
+                self.refresh_access_token()  # Try to refresh the access token
+            except AuthenticationException:
+                # Refresh token expired, authenticate again
+                try:
+                    self.get_token()
+                except AuthenticationException as exc:
+                    # Authentication failed, raise an error
+                    raise AuthenticationException("Failed to re-authenticate") from exc
 
-            return data
+            # Refresh token succeeded, retry the request
+            headers = kwargs.get("headers", {}).copy()
+            headers["Authorization"] = f"Bearer {self.access_token}"
+            kwargs["headers"] = headers
 
-        except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise AuthenticationException(http_err_msg) from exc
+            response = requests.request(method, url, **kwargs)
 
-        except requests.RequestException as exc:
-            raise AuthenticationException(err_msg) from exc
+        response.raise_for_status()
 
-    def refresh_access_token(self) -> dict:
-        """Refresh authentication token."""
-        err_msg = "Failed to refresh token"
+        return response
 
-        try:
-            response = requests.post(
-                self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
-                data={"refresh": self.refresh_token},
-            )
-            response.raise_for_status()
-            data = response.json()
-            self.token["access"] = data["access"]
-            self.token["refresh"] = data.get("refresh", self.refresh_token)
+    def _handle_request_exception(
+        self,
+        exc: requests.RequestException,
+        msg: str,
+        default_exc_cls=KMSClientException,
+    ) -> NoReturn:
+        """Handle RequestException."""
+        if isinstance(exc, requests.HTTPError):
+            response = exc.response
+            status_code = response.status_code
 
-            if self._on_token_refresh:
-                self._on_token_refresh(self.token)
+            msg = self._get_http_error_message(exc, msg)
 
-            return data
+            if status_code in {502, 503, 504}:
+                raise ConnectionException(msg) from exc
 
-        except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise AuthenticationException(http_err_msg) from exc
-
-        except requests.RequestException as exc:
-            raise AuthenticationException(err_msg) from exc
+        raise default_exc_cls(msg) from exc
 
     def _get_http_error_message(self, exc: requests.HTTPError, title: str) -> str:
         """Get HTTP error message."""
@@ -353,46 +366,49 @@ class APIKMSClient(KMSClient):
             f"Response: {response.text}"
         )
 
-    def _request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """Make a request to the API."""
-        headers = kwargs.pop("headers", {}).copy()
-        headers["Authorization"] = f"Bearer {self.access_token}"
-        kwargs["headers"] = headers
-
-        err_msg = f"Request to {url} failed"
-
+    def get_token(self) -> dict:
+        """Get authentication token."""
         try:
-            response = requests.request(method, url, **kwargs)
-
-            if response.status_code == 401:
-                try:
-                    self.refresh_access_token()  # Try to refresh the access token
-                except AuthenticationException:
-                    # Refresh token expired, authenticate again
-                    try:
-                        self.get_token()
-                    except AuthenticationException as exc:
-                        # Authentication failed, raise an error
-                        raise AuthenticationException(
-                            "Failed to re-authenticate"
-                        ) from exc
-
-                # Refresh token succeeded, retry the request
-                headers = kwargs.get("headers", {}).copy()
-                headers["Authorization"] = f"Bearer {self.access_token}"
-                kwargs["headers"] = headers
-
-                response = requests.request(method, url, **kwargs)
-
+            response = requests.post(
+                self.urls[self.__class__.URL_TOKEN_KEY],
+                data={"client_id": self.client_id, "client_secret": self.client_secret},
+            )
             response.raise_for_status()
-            return response
+            data = response.json()
+            self.token = data
 
-        except requests.HTTPError as exc:
-            http_err_msg = self._get_http_error_message(exc, err_msg)
-            raise KMSClientException(http_err_msg) from exc
+            if self._on_token_refresh:
+                self._on_token_refresh(data)
+
+            return data
 
         except requests.RequestException as exc:
-            raise KMSClientException(err_msg) from exc
+            self._handle_request_exception(
+                exc, "Failed to get token", AuthenticationException
+            )
+
+    def refresh_access_token(self) -> dict:
+        """Refresh authentication token."""
+
+        try:
+            response = requests.post(
+                self.urls[self.__class__.URL_TOKEN_REFRESH_KEY],
+                data={"refresh": self.refresh_token},
+            )
+            response.raise_for_status()
+            data = response.json()
+            self.token["access"] = data["access"]
+            self.token["refresh"] = data.get("refresh", self.refresh_token)
+
+            if self._on_token_refresh:
+                self._on_token_refresh(self.token)
+
+            return data
+
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to refresh token", AuthenticationException
+            )
 
     def create_key(self, description: str | None = None) -> dict:
         """Create a new key.
@@ -407,8 +423,11 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_CREATE_KEY],
                 json={"description": description},
             )
-        except KMSClientException as exc:
-            raise CreateKeyException("Failed to create key") from exc
+
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to create key", CreateKeyException
+            )
 
         return response.json()
 
@@ -427,8 +446,10 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_DECRYPT_KEY].format(key_id=key_id),
                 json={"ciphertext": ciphertext_base64},
             )
-        except KMSClientException as exc:
-            raise DecryptException("Failed to decrypt ciphertext") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to decrypt ciphertext", DecryptException
+            )
 
         plaintext_base64 = response.json()["plaintext"]
 
@@ -445,8 +466,10 @@ class APIKMSClient(KMSClient):
                 "GET",
                 self.urls[self.__class__.URL_GET_PUBLIC_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise GetPublicKeyException("Failed to get public key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to get public key", GetPublicKeyException
+            )
 
         return response.json()["public_key"]
 
@@ -461,8 +484,10 @@ class APIKMSClient(KMSClient):
                 "GET",
                 self.urls[self.__class__.URL_DESCRIBE_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise DescribeKeyException("Failed to describe key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to describe key", DescribeKeyException
+            )
 
         return response.json()
 
@@ -480,10 +505,10 @@ class APIKMSClient(KMSClient):
                 ),
                 json={"description": description},
             )
-        except KMSClientException as exc:
-            raise UpdateKeyDescriptionException(
-                "Failed to update key description"
-            ) from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to update key description", UpdateKeyDescriptionException
+            )
 
         return response.json()
 
@@ -497,8 +522,10 @@ class APIKMSClient(KMSClient):
                 "POST",
                 self.urls[self.__class__.URL_DISABLE_KEY].format(key_id=key_id),
             )
-        except KMSClientException as exc:
-            raise DisableKeyException("Failed to disable key") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to disable key", DisableKeyException
+            )
 
         return response.json()
 
@@ -514,7 +541,9 @@ class APIKMSClient(KMSClient):
                 self.urls[self.__class__.URL_CREATE_ALIAS_KEY].format(key_id=key_id),
                 json={"alias": alias_name},
             )
-        except KMSClientException as exc:
-            raise CreateAliasException("Failed to create alias") from exc
+        except requests.RequestException as exc:
+            self._handle_request_exception(
+                exc, "Failed to create alias", CreateAliasException
+            )
 
         return response.json()
