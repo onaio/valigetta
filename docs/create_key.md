@@ -46,3 +46,28 @@ The description of the KMS key.
 - **creation_date**
 
 The date and time when the KMS key was created.
+
+## Exceptions
+
+- `valigetta.exceptions.ConnectionException`
+- `valigetta.exceptions.CreateKeyException`
+
+## Examples
+
+The following example creates a new key with the description "My test key".
+
+```python
+response = client.create_key(description="My test key")
+
+print(response)
+```
+
+**Example Output**
+
+```json
+{
+  "key_id": "8eb847a3-9eb0-4bd9-9758-f7d14a575985",
+  "description": "My test key",
+  "creation_date": "2023-04-01T12:00:00Z"
+}
+```

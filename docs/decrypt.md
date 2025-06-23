@@ -41,3 +41,29 @@ The identifier of the KMS key used to decrypt the ciphertext.
 - **plaintext**
 
 The decrypted plaintext data.
+
+## Exceptions
+
+- `valigetta.exceptions.ConnectionException`
+- `valigetta.exceptions.DecryptException`
+
+## Examples
+
+The following example decrypts a ciphertext.
+
+```python
+response = client.decrypt(
+    key_id="8eb847a3-9eb0-4bd9-9758-f7d14a575985",
+    ciphertext=b'Ci...'
+)
+print(response)
+```
+
+**Example Output**
+
+```json
+{
+  "key_id": "8eb847a3-9eb0-4bd9-9758-f7d14a575985",
+  "plaintext": "b'decrypted data'"
+}
+```
