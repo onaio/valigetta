@@ -507,8 +507,7 @@ def test_decrypt_submission_with_missing_media_file(
         )
 
     assert str(exc_info.value) == (
-        "Failed to validate submission: Media file forest.mp4.enc "
-        "not found in provided files."
+        "Media file forest.mp4.enc not found in provided files."
     )
 
 
@@ -526,6 +525,5 @@ def test_decrypt_submission_with_missing_submission_file(
         )
 
     assert str(exc_info.value) == (
-        "Failed to validate submission: Submission file submission.xml.enc "
-        "not found in provided files."
+        "Submission file submission.xml.enc not found in provided files."
     )
