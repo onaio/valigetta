@@ -370,21 +370,15 @@ def is_submission_valid(
         """Computes the MD5 digest of the given message"""
         return hashlib.md5(message.encode("utf-8")).digest()
 
-    try:
-        computed_signature = _build_signature(tree, dec_files)
-        computed_signature_digest = compute_digest(computed_signature)
-        encrypted_b64_signature = extract_encrypted_signature(tree)
-        encrypted_signature = base64.b64decode(encrypted_b64_signature)
-        expected_signature_digest = kms_client.decrypt(
-            key_id=key_id, ciphertext=encrypted_signature
-        )
+    computed_signature = _build_signature(tree, dec_files)
+    computed_signature_digest = compute_digest(computed_signature)
+    encrypted_b64_signature = extract_encrypted_signature(tree)
+    encrypted_signature = base64.b64decode(encrypted_b64_signature)
+    expected_signature_digest = kms_client.decrypt(
+        key_id=key_id, ciphertext=encrypted_signature
+    )
 
-        logger.debug("Computed signature digest: %r", computed_signature_digest)
-        logger.debug("Expected signature digest: %r", expected_signature_digest)
+    logger.debug("Computed signature digest: %r", computed_signature_digest)
+    logger.debug("Expected signature digest: %r", expected_signature_digest)
 
-        return hmac.compare_digest(expected_signature_digest, computed_signature_digest)
-
-    except Exception as exc:
-        logger.error(f"Error validating submission: {exc}")
-
-        raise InvalidSubmissionException(f"Failed to validate submission: {exc}")
+    return hmac.compare_digest(expected_signature_digest, computed_signature_digest)
