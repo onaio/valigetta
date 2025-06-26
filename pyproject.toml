@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "valigetta"
+description = "A Python SDK for managing encryption keys and decrypting ODK submissions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+  { name = "Ona Systems Inc.", email = "tech@ona.io" }
+]
+urls = { Homepage = "https://github.com/onaio/valigetta" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: OS Independent"
+]
+dynamic = ["version"]
+
+dependencies = [
+  "boto3 >= 1.37.2, < 2",
+  "cryptography >= 44.0.2, < 45",
+  "pycryptodome >= 3.21.0, < 4"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "black"
+]
+
+[tool.setuptools.packages.find]
+where = [""]
+
+[tool.setuptools.dynamic]
+version = { attr = "valigetta.__version__" }
