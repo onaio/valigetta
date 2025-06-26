@@ -2,7 +2,7 @@
 
 ![Coverage](https://onaio.github.io/valigetta/coverage/coverage.svg)
 
-A Python Software Development Kit (SDK) for managing encryption keys and decrypting submissions from ODK servers.
+A Python Software Development Kit (SDK) for managing encryption keys and decrypting ODK submissions.
 
 ## Usage
 
