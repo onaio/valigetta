@@ -210,6 +210,7 @@ def decrypt_submission(
     key_id: str,
     submission_xml: BytesIO,
     enc_files: dict[str, BytesIO],
+    skip_validation: bool = False,
 ) -> Iterator[Tuple[str, BytesIO]]:
     """Decrypt submission's encrypted files.
 
@@ -217,6 +218,7 @@ def decrypt_submission(
     :param key_id: Identifier for the KMS key
     :param submission_xml: Submission XML file
     :param enc_files: Encrypted files
+    :param skip_validation: Skip submission validation
     :return: A generator yielding decrypted files
     """
     tree = _parse_submission_xml(submission_xml)
@@ -258,7 +260,7 @@ def decrypt_submission(
         )
         yield _strip_enc_extension(enc_submission_name), BytesIO(dec_data)
 
-    if not is_submission_valid(
+    if not skip_validation and not is_submission_valid(
         kms_client=kms_client,
         key_id=key_id,
         tree=tree,
