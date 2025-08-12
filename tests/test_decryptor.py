@@ -2,7 +2,7 @@ import base64
 import hashlib
 import xml.etree.ElementTree as ET
 from io import BytesIO
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from Crypto.Cipher import AES
@@ -220,6 +220,29 @@ def test_decrypt_submission(
         enc_files=fake_encrypted_files,
     ):
         assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
+
+
+def test_decrypt_submission_with_skip_validation(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml,
+    fake_decrypted_files,
+    fake_encrypted_files,
+):
+    """Decryption of an ODK submission with skip validation."""
+    with patch("valigetta.decryptor.is_submission_valid") as mock_is_submission_valid:
+        mock_is_submission_valid.return_value = False
+
+        for dec_file_name, dec_file in decrypt_submission(
+            kms_client=aws_kms_client,
+            key_id=aws_kms_key,
+            submission_xml=fake_submission_xml,
+            enc_files=fake_encrypted_files,
+            skip_validation=True,
+        ):
+            assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
+
+        mock_is_submission_valid.assert_not_called()
 
 
 def test_corrupted_submission(
