@@ -71,18 +71,12 @@ def extract_instance_id(tree: ET.Element) -> str:
     :return: Value of the root node's "instanceID"
     """
 
-    instance_id = tree.attrib.get("instanceID")
+    instance_id = tree.attrib.get("instanceID") or _extract_xml_value(
+        tree, ".//meta:instanceID"
+    )
 
     if instance_id:
         return instance_id
-
-    # Fallback to searching inside meta tag
-    meta_elem = tree.find(".//{http://openrosa.org/xforms}meta")
-
-    if meta_elem is not None:
-        instance_id_elem = meta_elem.find("{http://openrosa.org/xforms}instanceID")
-        if instance_id_elem is not None and instance_id_elem.text:
-            return instance_id_elem.text.strip()
 
     raise InvalidSubmissionException("instanceID not found in submission.xml")
 
