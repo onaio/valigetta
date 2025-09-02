@@ -321,17 +321,48 @@ def test_kms_decrypt_called_twice(
     aws_kms_client.decrypt.assert_has_calls(calls)
 
 
-def test_extract_instance_id(tree_encrypted_ns):
-    """Extract of instanceID from submission XML is successful."""
+def test_extract_instance_id_from_attribute(tree_encrypted_ns):
+    """Extraction of instanceID from attribute is successful."""
     instance_id = extract_instance_id(tree_encrypted_ns)
 
     assert instance_id == "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
 
-    # Missing instanceID
+
+@pytest.mark.parametrize(
+    "xml",
+    [
+        # <instanceID> tag uses default namespace
+        "<data><meta xmlns='http://openrosa.org/xforms'>"
+        "<instanceID>uuid:a10ead67</instanceID></meta></data>",
+        # <instanceID> tag is namespaced
+        "<data><orx:meta xmlns:orx='http://openrosa.org/xforms'>"
+        "<orx:instanceID>uuid:a10ead67</orx:instanceID></orx:meta></data>",
+    ],
+)
+def test_extract_instance_id_from_meta_tag(xml):
+    """Falls back to <meta> tag if instanceID attribute is not present."""
+    instance_id = extract_instance_id(ET.fromstring(xml))
+
+    assert instance_id == "uuid:a10ead67"
+
+
+def test_extract_instance_id_missing():
+    """Raises an error if instanceID is not found in submission.xml"""
     with pytest.raises(InvalidSubmissionException) as exc_info:
-        extract_instance_id(ET.fromstring(b"<data>hello</data>"))
+        extract_instance_id(ET.fromstring("<data>hello</data>"))
 
     assert str(exc_info.value) == "instanceID not found in submission.xml"
+
+
+def test_extract_instance_id_strips_whitespace():
+    """Strips whitespace from instanceID."""
+    xml = (
+        "<data><meta xmlns='http://openrosa.org/xforms'>"
+        "<instanceID>\n  uuid:a10ead67 \t</instanceID></meta></data>"
+    )
+    instance_id = extract_instance_id(ET.fromstring(xml))
+
+    assert instance_id == "uuid:a10ead67"
 
 
 def test_extract_encrypted_aes_key(
