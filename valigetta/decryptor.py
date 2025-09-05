@@ -196,7 +196,12 @@ def decrypt_file(
     cipher_aes = AES.new(aes_key, AES.MODE_CFB, iv=iv, segment_size=128)
     decrypted = cipher_aes.decrypt(file.read())
     # Strip any PKCS5/PKCS7 padding
-    return unpad(decrypted, AES.block_size)
+    try:
+        return unpad(decrypted, AES.block_size)
+    except ValueError as exc:
+        raise InvalidSubmissionException(
+            f"Invalid padding in decrypted file: {exc}"
+        ) from exc
 
 
 def decrypt_submission(
