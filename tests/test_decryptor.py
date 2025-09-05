@@ -401,6 +401,25 @@ def test_decrypt_file(fake_aes_key, encrypt_submission):
     assert dec_file == original_data
 
 
+@patch("valigetta.decryptor.unpad")
+def test_decrypt_file_with_invalid_padding(
+    mock_unpad, fake_aes_key, encrypt_submission
+):
+    """Decrypting a single file with invalid padding raises an error."""
+    mock_unpad.side_effect = ValueError("Invalid padding")
+
+    plaintext_aes_key, _ = fake_aes_key
+    original_data = b"A" * 10 * 1024  # 10KB of 'A' characters
+    enc_file = encrypt_submission(original_data, 1)
+
+    with pytest.raises(InvalidSubmissionException) as exc_info:
+        decrypt_file(
+            enc_file, plaintext_aes_key, "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0", 1
+        )
+
+    assert str(exc_info.value) == "Invalid padding in decrypted file: Invalid padding"
+
+
 def test_extract_encrypted_signature(
     tree_encrypted_ns, fake_signature, tree_submissions_ns
 ):
