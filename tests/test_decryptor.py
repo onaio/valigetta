@@ -543,7 +543,7 @@ def test_get_validation_status(
     )
 
 
-def test_get_validation_status_invalid(
+def test_get_validation_status_corrupted_file(
     aws_kms_client, tree_encrypted_ns, fake_decrypted_files, aws_kms_key
 ):
     """Corrupted file content is reported as not valid."""
