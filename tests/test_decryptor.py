@@ -9,6 +9,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
 from valigetta.decryptor import (
+    ValidationStatus,
     _get_submission_iv,
     decrypt_file,
     decrypt_submission,
@@ -19,7 +20,7 @@ from valigetta.decryptor import (
     extract_form_id,
     extract_instance_id,
     extract_version,
-    is_submission_valid,
+    get_validation_status,
 )
 from valigetta.exceptions import InvalidSubmissionException
 
@@ -213,36 +214,67 @@ def test_decrypt_submission(
     fake_encrypted_files,
 ):
     """Decryption of an ODK submission."""
-    for dec_file_name, dec_file in decrypt_submission(
+    dec_files, validation_status = decrypt_submission(
         kms_client=aws_kms_client,
         key_id=aws_kms_key,
         submission_xml=fake_submission_xml,
         enc_files=fake_encrypted_files,
-    ):
+    )
+
+    assert validation_status == ValidationStatus.VALID
+
+    for dec_file_name, dec_file in dec_files:
         assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
 
 
-def test_decrypt_submission_with_skip_validation(
+@pytest.fixture
+def fake_submission_xml_without_signature(fake_aes_key):
+    """Fake submission XML without base64EncryptedElementSignature.
+
+    The element is optional in the ODK XForms specification.
+    """
+    _, fake_encrypted_key = fake_aes_key
+    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+
+    xml_content = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          instanceID="uuid:a10ead67-7415-47da-b823-0947ab8a8ef0"
+          submissionDate="2025-02-13T13:46:07.458944+00:00"
+          xmlns="http://opendatakit.org/encrypted">
+        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
+        <orx:meta xmlns:orx="http://openrosa.org/xforms">
+            <orx:instanceID>uuid:a10ead67-7415-47da-b823-0947ab8a8ef0</orx:instanceID>
+        </orx:meta>
+        <media>
+            <file>sunset.png.enc</file>
+            <file>forest.mp4.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+    </data>
+    """.strip()
+
+    return BytesIO(xml_content.encode("utf-8"))
+
+
+def test_decrypt_submission_without_signature(
     aws_kms_client,
     aws_kms_key,
-    fake_submission_xml,
+    fake_submission_xml_without_signature,
     fake_decrypted_files,
     fake_encrypted_files,
 ):
-    """Decryption of an ODK submission with skip validation."""
-    with patch("valigetta.decryptor.is_submission_valid") as mock_is_submission_valid:
-        mock_is_submission_valid.return_value = False
+    """A submission without a signature is decrypted but not validated."""
+    dec_files, validation_status = decrypt_submission(
+        kms_client=aws_kms_client,
+        key_id=aws_kms_key,
+        submission_xml=fake_submission_xml_without_signature,
+        enc_files=fake_encrypted_files,
+    )
 
-        for dec_file_name, dec_file in decrypt_submission(
-            kms_client=aws_kms_client,
-            key_id=aws_kms_key,
-            submission_xml=fake_submission_xml,
-            enc_files=fake_encrypted_files,
-            skip_validation=True,
-        ):
-            assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
+    assert validation_status == ValidationStatus.NOT_VALIDATED
 
-        mock_is_submission_valid.assert_not_called()
+    for dec_file_name, dec_file in dec_files:
+        assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
 
 
 def test_corrupted_submission(
@@ -253,7 +285,7 @@ def test_corrupted_submission(
     fake_decrypted_media,
     encrypt_submission,
 ):
-    """Corrupt data is handled."""
+    """Corrupt data is reported as not valid."""
     # All have an initialization vector of 0
     enc_files = {
         "submission.xml.enc": encrypt_submission(
@@ -267,21 +299,20 @@ def test_corrupted_submission(
         ),
     }
 
-    with pytest.raises(InvalidSubmissionException) as exc_info:
-        list(
-            decrypt_submission(
-                kms_client=aws_kms_client,
-                key_id=aws_kms_key,
-                submission_xml=fake_submission_xml,
-                enc_files=enc_files,
-            )
-        )
-
-    assert str(exc_info.value) == (
-        "Submission validation failed for instance ID "
-        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0. "
-        "Corrupted data or incorrect signature"
+    dec_files, validation_status = decrypt_submission(
+        kms_client=aws_kms_client,
+        key_id=aws_kms_key,
+        submission_xml=fake_submission_xml,
+        enc_files=enc_files,
     )
+
+    assert validation_status == ValidationStatus.NOT_VALID
+    # Decrypted files are still returned so the caller decides what to do
+    assert [dec_file_name for dec_file_name, _ in dec_files] == [
+        "sunset.png",
+        "forest.mp4",
+        "submission.xml",
+    ]
 
 
 def test_kms_decrypt_called_twice(
@@ -301,18 +332,12 @@ def test_kms_decrypt_called_twice(
     plaintext_key, fake_encrypted_key = fake_aes_key
     aws_kms_client.decrypt = MagicMock(return_value=plaintext_key)
 
-    try:
-        list(
-            decrypt_submission(
-                kms_client=aws_kms_client,
-                key_id=key_id,
-                submission_xml=fake_submission_xml,
-                enc_files=fake_encrypted_files,
-            )
-        )
-
-    except InvalidSubmissionException:
-        pass
+    decrypt_submission(
+        kms_client=aws_kms_client,
+        key_id=key_id,
+        submission_xml=fake_submission_xml,
+        enc_files=fake_encrypted_files,
+    )
 
     calls = [
         call(key_id=key_id, ciphertext=fake_encrypted_key),
@@ -428,14 +453,8 @@ def test_extract_encrypted_signature(
 
     assert enc_signature == base64.b64encode(fake_signature).decode("utf-8")
 
-    # Missing signature
-    with pytest.raises(InvalidSubmissionException) as exc_info:
-        extract_encrypted_signature(ET.fromstring(b"<data>hello</data>"))
-
-    assert (
-        str(exc_info.value)
-        == "base64EncryptedElementSignature element not found in submission.xml"
-    )
+    # Missing signature. The element is optional in the spec, so no error
+    assert extract_encrypted_signature(ET.fromstring(b"<data>hello</data>")) is None
 
     # Submission with namespace http://opendatakit.org/submissions
     enc_signature = extract_encrypted_signature(tree_submissions_ns)
@@ -506,31 +525,40 @@ def test_extract_media_file_names(tree_encrypted_ns, tree_submissions_ns):
     assert media_file_names == ["sunset.png.enc", "forest.mp4.enc"]
 
 
-def test_is_submssion_valid(
+def test_get_validation_status(
     aws_kms_client,
     tree_encrypted_ns,
     fake_decrypted_files,
     aws_kms_key,
     fake_aes_key,
 ):
-    """Is valid check for decrypted submission contents works."""
+    """Validation status of a decrypted submission is determined correctly."""
     key_id = aws_kms_key
 
-    assert is_submission_valid(
-        kms_client=aws_kms_client,
-        key_id=key_id,
-        tree=tree_encrypted_ns,
-        dec_files=list(fake_decrypted_files.items()),
+    assert (
+        get_validation_status(
+            kms_client=aws_kms_client,
+            key_id=key_id,
+            tree=tree_encrypted_ns,
+            dec_files=list(fake_decrypted_files.items()),
+        )
+        == ValidationStatus.VALID
     )
 
     # Corrupted file
-    assert not is_submission_valid(
-        kms_client=aws_kms_client,
-        key_id=key_id,
-        tree=tree_encrypted_ns,
-        dec_files=list(
-            {**fake_decrypted_files, "sunset.png": BytesIO(b"corrupted sunset")}.items()
-        ),
+    assert (
+        get_validation_status(
+            kms_client=aws_kms_client,
+            key_id=key_id,
+            tree=tree_encrypted_ns,
+            dec_files=list(
+                {
+                    **fake_decrypted_files,
+                    "sunset.png": BytesIO(b"corrupted sunset"),
+                }.items()
+            ),
+        )
+        == ValidationStatus.NOT_VALID
     )
 
     # Signature mismatch
@@ -558,12 +586,38 @@ def test_is_submssion_valid(
     dec_files = list(fake_decrypted_files.items())
     dec_files[0] = ("submission.xml", BytesIO(submission_xml.encode("utf-8")))
 
-    assert not is_submission_valid(
-        kms_client=aws_kms_client,
-        key_id=key_id,
-        tree=tree_encrypted_ns,
-        dec_files=dec_files,
+    assert (
+        get_validation_status(
+            kms_client=aws_kms_client,
+            key_id=key_id,
+            tree=tree_encrypted_ns,
+            dec_files=dec_files,
+        )
+        == ValidationStatus.NOT_VALID
     )
+
+
+def test_get_validation_status_without_signature(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml_without_signature,
+    fake_decrypted_files,
+):
+    """A submission without a signature has nothing to validate against."""
+    aws_kms_client.decrypt = MagicMock()
+    tree = ET.fromstring(fake_submission_xml_without_signature.getvalue())
+
+    assert (
+        get_validation_status(
+            kms_client=aws_kms_client,
+            key_id=aws_kms_key,
+            tree=tree,
+            dec_files=list(fake_decrypted_files.items()),
+        )
+        == ValidationStatus.NOT_VALIDATED
+    )
+    # No signature to decrypt, so the KMS is never called
+    aws_kms_client.decrypt.assert_not_called()
 
 
 def test_decrypt_submission_with_missing_media_file(
@@ -573,10 +627,30 @@ def test_decrypt_submission_with_missing_media_file(
     fake_encrypted_files.pop("forest.mp4.enc")
 
     with pytest.raises(InvalidSubmissionException) as exc_info:
-        list(
-            decrypt_submission(
-                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
-            )
+        decrypt_submission(
+            aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
+        )
+
+    assert str(exc_info.value) == (
+        "Media file forest.mp4.enc not found in provided files."
+    )
+
+
+def test_decrypt_submission_without_signature_with_missing_file(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml_without_signature,
+    fake_encrypted_files,
+):
+    """Missing files are reported even when there is no signature to validate."""
+    fake_encrypted_files.pop("forest.mp4.enc")
+
+    with pytest.raises(InvalidSubmissionException) as exc_info:
+        decrypt_submission(
+            aws_kms_client,
+            aws_kms_key,
+            fake_submission_xml_without_signature,
+            fake_encrypted_files,
         )
 
     assert str(exc_info.value) == (
@@ -591,10 +665,8 @@ def test_decrypt_submission_with_missing_submission_file(
     fake_encrypted_files.pop("submission.xml.enc")
 
     with pytest.raises(InvalidSubmissionException) as exc_info:
-        list(
-            decrypt_submission(
-                aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
-            )
+        decrypt_submission(
+            aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
         )
 
     assert str(exc_info.value) == (
