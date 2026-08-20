@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import logging
 import xml.etree.ElementTree as ET
+from enum import Enum
 from io import BytesIO
 from typing import Iterable, Iterator, List, Optional, Tuple
 
@@ -17,6 +18,14 @@ from valigetta.exceptions import InvalidSubmissionException
 from valigetta.kms import KMSClient
 
 logger = logging.getLogger(__name__)
+
+
+class ValidationStatus(Enum):
+    """Outcome of checking a decrypted submission against its signature."""
+
+    VALID = "valid"
+    NOT_VALID = "not_valid"
+    NOT_VALIDATED = "not_validated"
 
 
 def _get_namespaces(tree: ET.Element) -> dict:
@@ -81,20 +90,16 @@ def extract_instance_id(tree: ET.Element) -> str:
     raise InvalidSubmissionException("instanceID not found in submission.xml")
 
 
-def extract_encrypted_signature(tree: ET.Element) -> str:
+def extract_encrypted_signature(tree: ET.Element) -> Optional[str]:
     """Extract submission's encrypted signature.
 
+    The signature is optional in the ODK XForms specification
+
     :param tree: Parsed XML tree
-    :return: Value from the tag base64EncryptedElementSignature
+    :return: Value from the tag base64EncryptedElementSignature, or None
+        if the submission does not carry a signature
     """
-    enc_signature = _extract_xml_value(tree, "n:base64EncryptedElementSignature")
-
-    if enc_signature:
-        return enc_signature
-
-    raise InvalidSubmissionException(
-        "base64EncryptedElementSignature element not found in submission.xml"
-    )
+    return _extract_xml_value(tree, "n:base64EncryptedElementSignature")
 
 
 def extract_encrypted_submission_file_name(tree: ET.Element) -> str:
@@ -209,16 +214,14 @@ def decrypt_submission(
     key_id: str,
     submission_xml: BytesIO,
     enc_files: dict[str, BytesIO],
-    skip_validation: bool = False,
-) -> Iterator[Tuple[str, BytesIO]]:
+) -> Tuple[Iterator[Tuple[str, BytesIO]], ValidationStatus]:
     """Decrypt submission's encrypted files.
 
     :param kms_client: KMSClient instance
     :param key_id: Identifier for the KMS key
     :param submission_xml: Submission XML file
     :param enc_files: Encrypted files
-    :param skip_validation: Skip submission validation
-    :return: A generator yielding decrypted files
+    :return: Decrypted files and the submission's validation status
     """
     tree = _parse_submission_xml(submission_xml)
 
@@ -233,24 +236,25 @@ def decrypt_submission(
     enc_submission_name = extract_encrypted_submission_file_name(tree)
     enc_media_names = extract_encrypted_media_file_names(tree)
 
+    if enc_submission_name not in enc_files:
+        raise InvalidSubmissionException(
+            f"Submission file {enc_submission_name} not found in provided files."
+        )
+
+    for enc_media_name in enc_media_names:
+        if enc_media_name not in enc_files:
+            raise InvalidSubmissionException(
+                f"Media file {enc_media_name} not found in provided files."
+            )
+
     def decrypt_files():
         # Process media files in order they appear in submission.xml
         for i, enc_file_name in enumerate(enc_media_names, start=1):
-            if enc_file_name not in enc_files:
-                raise InvalidSubmissionException(
-                    f"Media file {enc_file_name} not found in provided files."
-                )
-
             enc_file = enc_files[enc_file_name]
             dec_data = decrypt_file(enc_file, aes_key, instance_id, i)
             yield _strip_enc_extension(enc_file_name), BytesIO(dec_data)
 
         # Process submission file last with index = number of media files + 1
-        if enc_submission_name not in enc_files:
-            raise InvalidSubmissionException(
-                f"Submission file {enc_submission_name} not found in provided files."
-            )
-
         dec_data = decrypt_file(
             enc_files[enc_submission_name],
             aes_key,
@@ -259,20 +263,16 @@ def decrypt_submission(
         )
         yield _strip_enc_extension(enc_submission_name), BytesIO(dec_data)
 
-    if not skip_validation and not is_submission_valid(
+    # Files are decrypted once to validate them and again for the caller, so
+    # that only one decrypted file is held in memory at a time
+    validation_status = get_validation_status(
         kms_client=kms_client,
         key_id=key_id,
         tree=tree,
         dec_files=decrypt_files(),
-    ):
-        raise InvalidSubmissionException(
-            (
-                f"Submission validation failed for instance ID {instance_id}. "
-                "Corrupted data or incorrect signature"
-            )
-        )
+    )
 
-    yield from decrypt_files()
+    return decrypt_files(), validation_status
 
 
 def _strip_enc_extension(encrypted_file_name: str) -> str:
@@ -352,28 +352,37 @@ def _build_signature(
     return signature
 
 
-def is_submission_valid(
+def get_validation_status(
     kms_client: KMSClient,
     key_id: str,
     tree: ET.Element,
     dec_files: Iterable[Tuple[str, BytesIO]],
-) -> bool:
-    """Check if decryted submission is valid
+) -> ValidationStatus:
+    """Check a decrypted submission against its signature.
+
+    The signature is optional in the ODK XForms specification. A submission
+    that does not carry one has nothing to check against, and is reported as
+    NOT_VALIDATED rather than as invalid.
 
     :param kms_client: KMSClient instance
     :param key_id: Identifier for the KMS key
     :param tree: Parsed XML tree
     :param dec_files: Decrypted files
-    :return True if submission is valid, False otherwise
+    :return: Validation status of the submission
     """
 
     def compute_digest(message: str) -> bytes:
         """Computes the MD5 digest of the given message"""
         return hashlib.md5(message.encode("utf-8")).digest()
 
+    encrypted_b64_signature = extract_encrypted_signature(tree)
+
+    if encrypted_b64_signature is None:
+        logger.debug("Submission has no signature. Nothing to validate against.")
+        return ValidationStatus.NOT_VALIDATED
+
     computed_signature = _build_signature(tree, dec_files)
     computed_signature_digest = compute_digest(computed_signature)
-    encrypted_b64_signature = extract_encrypted_signature(tree)
     encrypted_signature = base64.b64decode(encrypted_b64_signature)
     expected_signature_digest = kms_client.decrypt(
         key_id=key_id, ciphertext=encrypted_signature
@@ -382,4 +391,7 @@ def is_submission_valid(
     logger.debug("Computed signature digest: %r", computed_signature_digest)
     logger.debug("Expected signature digest: %r", expected_signature_digest)
 
-    return hmac.compare_digest(expected_signature_digest, computed_signature_digest)
+    if hmac.compare_digest(expected_signature_digest, computed_signature_digest):
+        return ValidationStatus.VALID
+
+    return ValidationStatus.NOT_VALID

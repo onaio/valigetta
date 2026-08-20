@@ -65,9 +65,11 @@ All clients support the same interface:
 
 Use `decrypt_submission()` to decrypt an encrypted ODK submission using a compatible `KMSClient` implementation (e.g. `AWSKMSClient`, `APIKMSClient`).
 
+It returns the decrypted files together with a `ValidationStatus` telling you whether the decrypted content matched the signature attached to the submission (`VALID`), did not match it (`NOT_VALID`), or could not be checked because the submission carries no signature (`NOT_VALIDATED`).
+
 ```python
 from valigetta import AWSKMSClient
-from valigetta.submission import decrypt_submission
+from valigetta.decryptor import ValidationStatus, decrypt_submission
 from io import BytesIO
 
 # Initialize the KMS client
@@ -83,7 +85,7 @@ with open("submission.xml", "rb") as submission_xml, \
      open("sunset.png.enc", "rb") as enc_media1, \
      open("forest.mp4.enc", "rb") as enc_media2:
 
-    for original_name, decrypted_file in decrypt_submission(
+    decrypted_files, validation_status = decrypt_submission(
         kms_client=kms,
         key_id="your-key-id",
         submission_xml=BytesIO(submission_xml.read()),
@@ -92,7 +94,12 @@ with open("submission.xml", "rb") as submission_xml, \
             "sunset.png.enc": BytesIO(enc_media1.read()),
             "forest.mp4.enc": BytesIO(enc_media2.read()),
         }
-    ):
+    )
+
+    if validation_status is ValidationStatus.NOT_VALID:
+        raise SystemExit("Submission content does not match its signature")
+
+    for original_name, decrypted_file in decrypted_files:
         with open(original_name, "wb") as out_file:
             out_file.write(decrypted_file.read())
 ```
