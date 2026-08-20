@@ -533,23 +533,25 @@ def test_get_validation_status(
     fake_aes_key,
 ):
     """Validation status of a decrypted submission is determined correctly."""
-    key_id = aws_kms_key
-
     assert (
         get_validation_status(
             kms_client=aws_kms_client,
-            key_id=key_id,
+            key_id=aws_kms_key,
             tree=tree_encrypted_ns,
             dec_files=list(fake_decrypted_files.items()),
         )
         == ValidationStatus.VALID
     )
 
-    # Corrupted file
+
+def test_get_validation_status_invalid(
+    aws_kms_client, tree_encrypted_ns, fake_decrypted_files, aws_kms_key
+):
+    """Corrupted file content is reported as not valid."""
     assert (
         get_validation_status(
             kms_client=aws_kms_client,
-            key_id=key_id,
+            key_id=aws_kms_key,
             tree=tree_encrypted_ns,
             dec_files=list(
                 {
@@ -561,7 +563,11 @@ def test_get_validation_status(
         == ValidationStatus.NOT_VALID
     )
 
-    # Signature mismatch
+
+def test_get_validation_status_sig_mismatch(
+    aws_kms_client, tree_encrypted_ns, fake_decrypted_files, aws_kms_key, fake_aes_key
+):
+    """Content that does not match the submission's signature is not valid."""
     _, fake_encrypted_key = fake_aes_key
     enc_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
     enc_signature_b64 = base64.b64encode(b"different-signature").decode("utf-8")
@@ -589,7 +595,7 @@ def test_get_validation_status(
     assert (
         get_validation_status(
             kms_client=aws_kms_client,
-            key_id=key_id,
+            key_id=aws_kms_key,
             tree=tree_encrypted_ns,
             dec_files=dec_files,
         )
