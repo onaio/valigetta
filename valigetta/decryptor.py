@@ -272,13 +272,6 @@ def decrypt_submission(
         dec_files=decrypt_files(),
     )
 
-    if validation_status is ValidationStatus.NOT_VALID:
-        logger.warning(
-            "Submission validation failed for instance ID %s. "
-            "Corrupted data or incorrect signature",
-            instance_id,
-        )
-
     return decrypt_files(), validation_status
 
 
