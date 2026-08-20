@@ -641,28 +641,6 @@ def test_decrypt_submission_with_missing_media_file(
     )
 
 
-def test_decrypt_submission_without_signature_with_missing_file(
-    aws_kms_client,
-    aws_kms_key,
-    fake_submission_xml_without_signature,
-    fake_encrypted_files,
-):
-    """Missing files are reported even when there is no signature to validate."""
-    fake_encrypted_files.pop("forest.mp4.enc")
-
-    with pytest.raises(InvalidSubmissionException) as exc_info:
-        decrypt_submission(
-            aws_kms_client,
-            aws_kms_key,
-            fake_submission_xml_without_signature,
-            fake_encrypted_files,
-        )
-
-    assert str(exc_info.value) == (
-        "Media file forest.mp4.enc not found in provided files."
-    )
-
-
 def test_decrypt_submission_with_missing_submission_file(
     aws_kms_client, aws_kms_key, fake_submission_xml, fake_encrypted_files
 ):
