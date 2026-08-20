@@ -530,7 +530,6 @@ def test_get_validation_status(
     tree_encrypted_ns,
     fake_decrypted_files,
     aws_kms_key,
-    fake_aes_key,
 ):
     """Validation status of a decrypted submission is determined correctly."""
     assert (
