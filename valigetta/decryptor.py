@@ -246,7 +246,6 @@ def decrypt_submission(
             raise InvalidSubmissionException(
                 f"Media file {enc_media_name} not found in provided files."
             )
-    
 
     def decrypt_files():
         # Process media files in order they appear in submission.xml
