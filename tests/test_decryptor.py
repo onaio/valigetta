@@ -61,12 +61,19 @@ def fake_decrypted_submission():
 
 
 @pytest.fixture
+def instance_id(request):
+    """instanceID the fake submission was encrypted with."""
+    return getattr(request, "param", "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0")
+
+
+@pytest.fixture
 def fake_signature(
     boto3_kms_client,
     aws_kms_key,
     fake_aes_key,
     fake_decrypted_submission,
     fake_decrypted_media,
+    instance_id,
 ):
     """Generate an encrypted signature using AWS KMS."""
 
@@ -85,7 +92,7 @@ def fake_signature(
         "test_valigetta",
         "202502131337",
         base64.b64encode(fake_encrypted_key).decode("utf-8"),
-        "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+        instance_id,
     ]
 
     # Add media files
@@ -137,11 +144,11 @@ def fake_submission_xml(fake_aes_key, fake_signature):
 
 
 @pytest.fixture
-def encrypt_submission(fake_aes_key):
+def encrypt_submission(fake_aes_key, instance_id):
     def _encrypt(original_data, iv_counter):
         plaintext_aes_key, _ = fake_aes_key
         iv = _get_submission_iv(
-            "uuid:a10ead67-7415-47da-b823-0947ab8a8ef0",
+            instance_id,
             plaintext_aes_key,
             iv_counter=iv_counter,
         )
@@ -277,6 +284,58 @@ def test_decrypt_submission_without_signature(
         assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
 
 
+@pytest.fixture
+def fake_submission_xml_empty_instance_id(fake_aes_key, fake_signature):
+    """Fake submission XML whose instanceID is present but empty.
+
+    ODK Collect submits this when a form's meta/instanceID is never
+    populated.
+    """
+    _, fake_encrypted_key = fake_aes_key
+    encrypted_key_b64 = base64.b64encode(fake_encrypted_key).decode("utf-8")
+    encrypted_signature_b64 = base64.b64encode(fake_signature).decode("utf-8")
+
+    xml_content = f"""<?xml version="1.0"?>
+    <data encrypted="yes" id="test_valigetta" version="202502131337"
+          xmlns="http://www.opendatakit.org/xforms/encrypted">
+        <base64EncryptedKey>{encrypted_key_b64}</base64EncryptedKey>
+        <orx:meta xmlns:orx="http://openrosa.org/xforms">
+            <orx:instanceID></orx:instanceID>
+        </orx:meta>
+        <media>
+            <file>sunset.png.enc</file>
+            <file>forest.mp4.enc</file>
+        </media>
+        <encryptedXmlFile>submission.xml.enc</encryptedXmlFile>
+        <base64EncryptedElementSignature>{encrypted_signature_b64}</base64EncryptedElementSignature>
+    </data>
+    """.strip()
+
+    return BytesIO(xml_content.encode("utf-8"))
+
+
+@pytest.mark.parametrize("instance_id", [""], indirect=True)
+def test_decrypt_submission_empty_instance_id(
+    aws_kms_client,
+    aws_kms_key,
+    fake_submission_xml_empty_instance_id,
+    fake_decrypted_files,
+    fake_encrypted_files,
+):
+    """A submission whose instanceID is empty is decrypted and validated."""
+    dec_files, validation_status = decrypt_submission(
+        kms_client=aws_kms_client,
+        key_id=aws_kms_key,
+        submission_xml=fake_submission_xml_empty_instance_id,
+        enc_files=fake_encrypted_files,
+    )
+
+    assert validation_status == ValidationStatus.VALID
+
+    for dec_file_name, dec_file in dec_files:
+        assert dec_file.getvalue() == fake_decrypted_files[dec_file_name].getvalue()
+
+
 def test_corrupted_submission(
     aws_kms_client,
     aws_kms_key,
@@ -371,10 +430,44 @@ def test_extract_instance_id_from_meta_tag(xml):
     assert instance_id == "uuid:a10ead67"
 
 
-def test_extract_instance_id_missing():
+@pytest.mark.parametrize(
+    "xml",
+    [
+        # <instanceID> tag is empty
+        "<data><meta xmlns='http://openrosa.org/xforms'>"
+        "<instanceID></instanceID></meta></data>",
+        # <instanceID> tag is self-closing
+        "<data><orx:meta xmlns:orx='http://openrosa.org/xforms'>"
+        "<orx:instanceID/></orx:meta></data>",
+        # <instanceID> tag contains only whitespace
+        "<data><meta xmlns='http://openrosa.org/xforms'>"
+        "<instanceID>\n  \t</instanceID></meta></data>",
+    ],
+)
+def test_extract_instance_id_empty(xml):
+    """An empty instanceID is extracted as an empty value.
+
+    The submission was encrypted using the empty value, so it can still
+    be decrypted.
+    """
+    instance_id = extract_instance_id(ET.fromstring(xml))
+
+    assert instance_id == ""
+
+
+@pytest.mark.parametrize(
+    "xml",
+    [
+        # <meta> tag is absent
+        "<data>hello</data>",
+        # <meta> tag has no <instanceID> tag
+        "<data><meta xmlns='http://openrosa.org/xforms'/></data>",
+    ],
+)
+def test_extract_instance_id_missing(xml):
     """Raises an error if instanceID is not found in submission.xml"""
     with pytest.raises(InvalidSubmissionException) as exc_info:
-        extract_instance_id(ET.fromstring("<data>hello</data>"))
+        extract_instance_id(ET.fromstring(xml))
 
     assert str(exc_info.value) == "instanceID not found in submission.xml"
 

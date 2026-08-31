@@ -76,18 +76,24 @@ def extract_encrypted_aes_key(tree: ET.Element) -> str:
 def extract_instance_id(tree: ET.Element) -> str:
     """Extract submissions's instanceID.
 
+    An instanceID that is present but empty is a value of its own. The
+    submission was encrypted using the empty value, so it is returned as
+    is instead of being treated as missing.
+
     :param tree: Parsed XML tree
     :return: Value of the root node's "instanceID"
     """
+    instance_id = tree.attrib.get("instanceID")
 
-    instance_id = tree.attrib.get("instanceID") or _extract_xml_value(
-        tree, ".//meta:instanceID"
-    )
+    if instance_id is not None:
+        return instance_id.strip()
 
-    if instance_id:
-        return instance_id
+    element = tree.find(".//meta:instanceID", _get_namespaces(tree))
 
-    raise InvalidSubmissionException("instanceID not found in submission.xml")
+    if element is None:
+        raise InvalidSubmissionException("instanceID not found in submission.xml")
+
+    return (element.text or "").strip()
 
 
 def extract_encrypted_signature(tree: ET.Element) -> Optional[str]:
